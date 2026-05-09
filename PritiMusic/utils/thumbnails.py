@@ -26,13 +26,12 @@ def clear(text):
             title += " " + i
     return title.strip()
 
-# ✅ Helper for Random Fallback
 def get_random_fallback_img():
     if YOUTUBE_IMG_URL:
         if isinstance(YOUTUBE_IMG_URL, list):
             return random.choice(YOUTUBE_IMG_URL)
         return YOUTUBE_IMG_URL
-    return "https://telegra.ph/file/2e3d368e77c449c287430.jpg" # Fallback
+    return "https://telegra.ph/file/2e3d368e77c449c287430.jpg"
 
 async def get_thumb(videoid):
     if os.path.isfile(f"cache/{videoid}.png"):
@@ -70,34 +69,39 @@ async def get_thumb(videoid):
                     await f.close()
 
         # ==========================================
-        # 🔥 IMAGE PROCESSING START (PERFECT ALIGNMENT) 🔥
+        # 🔥 FINAL PERFECT STRUCTURE (= ALIGNMENT)
         # ==========================================
         youtube = Image.open(f"cache/thumb{videoid}.png")
         image1 = changeImageSize(1280, 720, youtube)
         image2 = image1.convert("RGBA")
         
-        # 1. Premium Blurred Dark Background
-        background = image2.filter(filter=ImageFilter.GaussianBlur(15))
+        # 1. Dark Blurred Background
+        background = image2.filter(filter=ImageFilter.GaussianBlur(20))
         enhancer = ImageEnhance.Brightness(background)
-        background = enhancer.enhance(0.4)
+        background = enhancer.enhance(0.3) # Dark for text clarity
         
-        # 2. Add Sharp Original Thumbnail in the center
-        sharp_thumb = changeImageSize(768, 432, youtube).convert("RGBA")
-        background.paste(sharp_thumb, (256, 50)) # Centered horizontally
+        # 2. Main Center Thumbnail (Size: 854x480)
+        sharp_thumb = changeImageSize(854, 480, youtube).convert("RGBA")
+        
+        # X=213 par place kiya taaki exactly center me rahe (1280-854)/2 = 213
+        margin_x = 213 
+        end_x = margin_x + 854 # = 1067 (Ye Right margin hai)
+        
+        background.paste(sharp_thumb, (margin_x, 40)) 
         
         draw = ImageDraw.Draw(background)
         
-        # 3. Fonts Setup
+        # 3. Fonts
         try:
             arial = ImageFont.truetype("PritiMusic/assets/font2.ttf", 30)
-            font = ImageFont.truetype("PritiMusic/assets/font.ttf", 40) 
+            font = ImageFont.truetype("PritiMusic/assets/font.ttf", 38) 
             small_font = ImageFont.truetype("PritiMusic/assets/font2.ttf", 25) 
         except:
             arial = ImageFont.load_default()
             font = ImageFont.load_default()
             small_font = ImageFont.load_default()
             
-        # 4. Watermark (Top Right)
+        # 4. Watermark (Top Right Corner)
         bot_name = "CLONNE MUSIC BOT"
         try:
             left, top, right, bottom = draw.textbbox((0, 0), bot_name, font=small_font)
@@ -107,74 +111,77 @@ async def get_thumb(videoid):
                 text_width, _ = draw.textsize(bot_name, font=small_font)
             except:
                 text_width = 250
-
-        draw.text((1280 - text_width - 30, 25), bot_name, fill="#1DB954", font=small_font)
+        draw.text((1280 - text_width - 30, 20), bot_name, fill="#1DB954", font=small_font)
         
-        # ==========================================
-        # ✅ FIX: PERFECT LEFT ALIGNMENT STRUCTURE 
-        # ==========================================
-        margin_x = 70  # Har cheez yahan se shuru hogi (= structure)
-        
-        # 5. Track Info (Title, Channel, Views)
+        # 5. Title & Channel (ALIGNED TO THUMBNAIL LEFT EDGE)
         final_title = clear(title)
-        # Agar title bahut bada hai toh usko cut kar denge taaki screen ke bahar na jaye
-        if len(final_title) > 55:
-            final_title = final_title[:55] + "..."
+        if len(final_title) > 45:
+            final_title = final_title[:45] + "..."
 
         draw.text(
-            (margin_x, 520),
+            (margin_x, 540), # Margin_x = 213
             final_title,
-            fill=(255, 255, 255), 
+            fill="white", 
             font=font,
         )
         draw.text(
-            (margin_x, 575),
-            f"👤 {channel}   |   👁️ {views[:23]}",
-            fill=(200, 200, 200), 
+            (margin_x, 595), # Margin_x = 213
+            f"{channel}  •  {views[:23]}",
+            fill=(180, 180, 180), 
             font=arial,
         )
         
-        # 6. Two-Tone Modern Progress Bar (Aligned with text)
+        # 6. Progress Bar (MATCHES THUMBNAIL WIDTH EXACTLY)
         theme_color = "#1DB954" 
         
-        # Empty Line
+        # Empty Track Line (From Thumbnail Left to Thumbnail Right)
         draw.line(
-            [(margin_x, 650), (1210, 650)],
+            [(margin_x, 660), (end_x, 660)], 
             fill="#555555",
             width=8,
             joint="curve",
         )
-        # Played Line
+        # Played Track Line
         draw.line(
-            [(margin_x, 650), (350, 650)],
+            [(margin_x, 660), (margin_x + 250, 660)],
             fill=theme_color,
             width=8,
             joint="curve",
         )
         # Playhead Circle
         draw.ellipse(
-            [(340, 638), (364, 662)],
+            [(margin_x + 240, 648), (margin_x + 264, 672)],
             outline=theme_color,
             fill=theme_color,
             width=15,
         )
         
         # 7. Timestamps
+        # Left Time (00:00)
         draw.text(
-            (margin_x, 670),
+            (margin_x, 675),
             "00:00",
-            fill=(200, 200, 200),
-            font=small_font,
-        )
-        draw.text(
-            (1135, 670), # Right aligned
-            f"{duration[:23]}",
-            fill=(200, 200, 200),
+            fill=(180, 180, 180),
             font=small_font,
         )
         
-        # ==========================================
-        # 🔥 IMAGE PROCESSING END 🔥
+        # Right Time (Duration) aligned perfectly to the right end of progress bar
+        try:
+            left, top, right, bottom = draw.textbbox((0, 0), f"{duration[:23]}", font=small_font)
+            dur_width = right - left
+        except:
+            try:
+                dur_width, _ = draw.textsize(f"{duration[:23]}", font=small_font)
+            except:
+                dur_width = 60
+                
+        draw.text(
+            (end_x - dur_width, 675), 
+            f"{duration[:23]}",
+            fill=(180, 180, 180),
+            font=small_font,
+        )
+        
         # ==========================================
 
         try:
@@ -187,3 +194,4 @@ async def get_thumb(videoid):
     except Exception as e:
         print(e)
         return get_random_fallback_img()
+        
