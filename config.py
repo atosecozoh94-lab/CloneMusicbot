@@ -70,7 +70,7 @@ confirmer = {}
 
 START_IMG_URL = getenv("START_IMG_URL", "https://graph.org/file/00e998a79b57a22c3a5df-237ef60d9c4f2b942c.jpg").split()
 HELP_IMG_URL = getenv("HELP_IMG_URL", "https://files.catbox.moe/u8ray8.jpg").split()
-PING_IMG_URL = getenv("PING_IMG_URL", "https://graph.org/file/b0c653f31190c72a55060-854eb9a703f571d442.mp4").split()
+PING_IMG_URL = getenv("PING_IMG_URL", "https://graph.org/file/c733732aa48f1f437cff8-46db3ecea9f26bc132.jpg").split()
 
 PLAYLIST_IMG_URL = getenv("PLAYLIST_IMG_URL", "https://i.ibb.co/gL3ykkyh/play-music.jpg").split()
 STATS_IMG_URL = getenv("STATS_IMG_URL", "https://i.ibb.co/pBqPtFYn/statistics.jpg").split()
