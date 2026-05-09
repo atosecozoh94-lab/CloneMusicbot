@@ -77,7 +77,7 @@ async def clone_page_cb(client, CallbackQuery, _):
     )
     await CallbackQuery.edit_message_media(
         media=InputMediaVideo(
-            media="https://files.catbox.moe/rxiwb3.mp4",
+            media="https://graph.org/file/f4914bfa1f677abeb3a56-4ee01ef7255b23b574.mp4",
             caption=clone_text
         ),
         reply_markup=InlineKeyboardMarkup(
