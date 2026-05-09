@@ -1,10 +1,12 @@
+import asyncio
 import random
 import string
 import re
-from urllib.parse import urlparse, parse_qs
+import unicodedata
+from urllib.parse import urlparse
 
 from pyrogram import filters
-from pyrogram.types import InlineKeyboardMarkup, InputMediaPhoto, Message
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto, Message
 from pytgcalls.exceptions import NoActiveGroupCall
 
 import config
@@ -26,6 +28,70 @@ from PritiMusic.utils.logger import play_logs
 from PritiMusic.utils.stream.stream import stream
 from config import BANNED_USERS, lyrical
 
+# -------------------------------------------------------
+# 🛡️ SECURITY & GOD-MODE WALL
+# -------------------------------------------------------
+BANNED_WORDS = [
+    "porn", "pornhub", "xvideos", "xnxx", "brazzers", 
+    "onlyfans", "xhamster", "hot bhabhi", "deskbabe", "redtube", "spankbang",
+    "child porn", "pedophile", "pedo", "jailbait", "loli", "shota", "csam",
+    "incest", "bestiality", "zoophilia", "snuff", "revenge porn", "nonconsensual"
+]
+
+def clean_invisible_chars(text):
+    if not isinstance(text, str):
+        return ""
+    text = unicodedata.normalize('NFKC', text)
+    return re.sub(r'[\u200B-\u200D\uFEFF\u202A-\u202E\u200e\u200f]', '', text)
+
+def is_nsfw_content(text):
+    if not text:
+        return False
+    text = clean_invisible_chars(str(text).lower())
+    for word in BANNED_WORDS:
+        if re.search(r'\b' + re.escape(word) + r'\b', text):
+            return True
+    return False
+
+def is_malicious_link(text):
+    if not text:
+        return False
+    text = clean_invisible_chars(str(text).lower())
+    if re.search(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', text): return True
+    bad_extensions = ["webhook", "ngrok", "localhost", "0.0.0.0", ".sh", ".txt", "payload", ".exe", ".bat", ".vbs", ".cmd", ".py", ".php"]
+    if any(ext in text for ext in bad_extensions): return True
+    dangerous_chars = ["rm -rf", "wget ", "curl ", "chmod ", "bash -c", "eval("]
+    if any(char in text for char in dangerous_chars): return True
+    return False
+
+def bouncer_check(_, __, message: Message):
+    if not message.text: return True
+    text = clean_invisible_chars(message.text.lower())
+    dangerous_symbols = ["ifs", "/etc/passwd", ".env", "webhook.site", "rm -rf", "wget ", "curl ", "chmod ", "bash -c", "eval("]
+    if any(sym in text for sym in dangerous_symbols): return False 
+    return True
+
+god_mode_filter = filters.create(bouncer_check)
+
+async def send_security_log(message: Message, breach_type: str, payload: str):
+    try:
+        chat_id = message.chat.id
+        chat_title = message.chat.title
+        chat_link = f"https://t.me/{message.chat.username}" if message.chat.username else "ᴘʀɪᴠᴀᴛᴇ"
+        user_mention = message.from_user.mention
+        user_id = message.from_user.id
+        username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
+
+        log_text = (
+            f"**🚨 sᴇᴄᴜʀɪᴛʏ ᴀʟᴇʀᴛ: {breach_type} 🚨**\n\n"
+            f"**👤 ᴜsᴇʀ:** {user_mention} (`{user_id}`)\n"
+            f"**🏠 ᴄʜᴀᴛ:** {chat_title} (`{chat_id}`)\n"
+            f"**⚠️ ᴘᴀʏʟᴏᴀᴅ:** `{payload}`"
+        )
+        await app.send_message(config.LOGGER_ID, text=log_text)
+    except Exception:
+        pass
+
 # ✅ Helper function for Random Image
 def get_random_img(img_list):
     if img_list:
@@ -34,20 +100,29 @@ def get_random_img(img_list):
         return img_list
     return "https://telegra.ph/file/2e3d368e77c449c287430.jpg" # Fallback
 
-# 🛡️ SECURITY PATCH: Anti Command-Injection Function
-def is_safe_input(text):
-    if not text:
-        return True
-    # Blocks shell execution characters: ; $ | & ` { } < > \ \n \r
-    dangerous_chars = [';', '$', '|', '&', '`', '{', '}', '<', '>', '\\', '\n', '\r']
-    if any(char in text for char in dangerous_chars):
-        return False
-    return True
+# 🛠️ EXACT MATCH URL CLEANER (Fixes Wrong Song/Playlist Play Issue)
+def clean_youtube_url(url):
+    if not isinstance(url, str): return url, None, "unknown"
+    
+    # Check for playlist first
+    list_match = re.search(r"list=([a-zA-Z0-9_-]+)", url)
+    if list_match and ("youtube.com" in url or "youtu.be" in url):
+        return f"https://www.youtube.com/playlist?list={list_match.group(1)}", list_match.group(1), "playlist"
+        
+    # Check for video
+    yt_match = re.search(r"(?:v=|youtu\.be/|shorts/|live/|embed/|watch\?v=|music\.youtube\.com/watch\?v=|/v/)([a-zA-Z0-9_-]{11})", url)
+    if yt_match:
+        return f"https://www.youtube.com/watch?v={yt_match.group(1)}", yt_match.group(1), "video"
+        
+    return url, None, "unknown"
+
+# -------------------------------------------------------
 
 @app.on_message(
-   filters.command(["play", "vplay", "cplay", "cvplay", "playforce", "vplayforce", "cplayforce", "cvplayforce"] ,prefixes=["/", "!", "%", ",", "", ".", "@", "#"])
+    filters.command(["play", "vplay", "cplay", "cvplay", "playforce", "vplayforce", "cplayforce", "cvplayforce"] ,prefixes=["/", "!", "%", ",", "", ".", "@", "#"])
     & filters.group
     & ~BANNED_USERS
+    & god_mode_filter
 )
 @PlayWrapper
 async def play_commnd(
@@ -81,7 +156,6 @@ async def play_commnd(
         if message.reply_to_message
         else None
     )
-
     if audio_telegram:
         if audio_telegram.file_size > 104857600:
             return await mystic.edit_text(_["play_5"])
@@ -101,10 +175,23 @@ async def play_commnd(
                 "path": file_path,
                 "dur": dur,
             }
+            
+            # 🛑 NSFW BLOCK
+            if is_nsfw_content(details.get("title", "")):
+                await send_security_log(message, "ɴsғᴡ ᴠɪᴏʟᴀᴛɪᴏɴ (Telegram Audio)", details.get("title", ""))
+                return await mystic.edit_text("**🚫 sᴇᴄᴜʀɪᴛʏ ᴀʟᴇʀᴛ: ᴀᴅᴜʟᴛ ᴄᴏɴᴛᴇɴᴛ ɪs sᴛʀɪᴄᴛʟʏ ᴘʀᴏʜɪʙɪᴛᴇᴅ!**")
+
             try:
                 await stream(
-                    _, mystic, user_id, details, chat_id, user_name,
-                    message.chat.id, streamtype="telegram", forceplay=fplay,
+                    _,
+                    mystic,
+                    user_id,
+                    details,
+                    chat_id,
+                    user_name,
+                    message.chat.id,
+                    streamtype="telegram",
+                    forceplay=fplay,
                 )
             except Exception as e:
                 ex_type = type(e).__name__
@@ -116,7 +203,6 @@ async def play_commnd(
                 return await mystic.edit_text(err)
             return await mystic.delete()
         return
-
     elif video_telegram:
         if message.reply_to_message.document:
             try:
@@ -142,10 +228,24 @@ async def play_commnd(
                 "path": file_path,
                 "dur": dur,
             }
+            
+            # 🛑 NSFW BLOCK
+            if is_nsfw_content(details.get("title", "")):
+                await send_security_log(message, "ɴsғᴡ ᴠɪᴏʟᴀᴛɪᴏɴ (Telegram Video)", details.get("title", ""))
+                return await mystic.edit_text("**🚫 sᴇᴄᴜʀɪᴛʏ ᴀʟᴇʀᴛ: ᴀᴅᴜʟᴛ ᴄᴏɴᴛᴇɴᴛ ɪs sᴛʀɪᴄᴛʟʏ ᴘʀᴏʜɪʙɪᴛᴇᴅ!**")
+
             try:
                 await stream(
-                    _, mystic, user_id, details, chat_id, user_name,
-                    message.chat.id, video=True, streamtype="telegram", forceplay=fplay,
+                    _,
+                    mystic,
+                    user_id,
+                    details,
+                    chat_id,
+                    user_name,
+                    message.chat.id,
+                    video=True,
+                    streamtype="telegram",
+                    forceplay=fplay,
                 )
             except Exception as e:
                 ex_type = type(e).__name__
@@ -157,18 +257,20 @@ async def play_commnd(
                 return await mystic.edit_text(err)
             return await mystic.delete()
         return
-
     elif url:
-        # 🛡️ SECURITY: Character Injection Check
-        if not is_safe_input(url):
-            LOGGER(__name__).warning(f"Malicious URL playback attempt blocked from {user_id}")
-            return await mystic.edit_text("❌ **Security Alert:** Malicious link detected. Request blocked.")
-
-        # 🛡️ SECURITY: Block Local Files
+        # 🛡️ SECURITY PATCH: Block Local Files & Validate Domains
         if not url.startswith(("http://", "https://")):
-            return await mystic.edit_text("❌ **Security Error:** Local files and invalid protocols are not allowed.")
+            return await mystic.edit_text("❌ **Security Error:** Local files are not allowed.")
+            
+        if is_malicious_link(url):
+            await send_security_log(message, "ᴍᴀʟɪᴄɪᴏᴜs ʜᴀᴄᴋ ʟɪɴᴋ", url)
+            return await mystic.edit_text("**🚫 sᴇᴄᴜʀɪᴛʏ ᴀʟᴇʀᴛ: ᴍᴀʟɪᴄɪᴏᴜs ʟɪɴᴋ ʙʟᴏᴄᴋᴇᴅ!**")
 
-        # 🛡️ SECURITY: Domain Whitelist Validation
+        if is_nsfw_content(url):
+            await send_security_log(message, "ɴsғᴡ ᴠɪᴏʟᴀᴛɪᴏɴ", url)
+            return await mystic.edit_text("**🚫 sᴇᴄᴜʀɪᴛʏ ᴀʟᴇʀᴛ: ᴀᴅᴜʟᴛ ᴄᴏɴᴛᴇɴᴛ ɪs sᴛʀɪᴄᴛʟʏ ᴘʀᴏʜɪʙɪᴛᴇᴅ!**")
+
+        # Domain Whitelist
         allowed_domains = [
             "youtube.com", "youtu.be",
             "spotify.com", "open.spotify.com",
@@ -183,10 +285,13 @@ async def play_commnd(
              )
 
         if await YouTube.exists(url):
-            if "playlist" in url:
+            # ✅ URL CLEANER APPLIED HERE (Fixes Wrong Song Issue)
+            clean_url, ext_id, y_type = clean_youtube_url(url)
+            
+            if y_type == "playlist":
                 try:
                     details = await YouTube.playlist(
-                        url,
+                        clean_url,
                         config.PLAYLIST_FETCH_LIMIT,
                         message.from_user.id,
                     )
@@ -195,49 +300,55 @@ async def play_commnd(
                     return await mystic.edit_text(_["play_3"])
                 streamtype = "playlist"
                 plist_type = "yt"
-                
-                # 🛡️ SECURITY: Safe ID Extraction using urlparse
-                parsed_url = urlparse(url)
-                query_params = parse_qs(parsed_url.query)
-                if "list" in query_params:
-                    plist_id = query_params["list"][0]
-                else:
-                    return await mystic.edit_text("❌ **Error:** Invalid playlist link structure.")
+                plist_id = ext_id
                 
                 img = get_random_img(config.PLAYLIST_IMG_URL)
                 cap = _["play_10"]
-            elif "https://youtu.be" in url:
-                videoid = url.split("/")[-1].split("?")[0]
-                details, track_id = await YouTube.track(f"https://www.youtube.com/watch?v={videoid}")
+                
+            elif y_type == "video":
+                try:
+                    details, track_id = await YouTube.track(clean_url)
+                except Exception as e:
+                    print(e)
+                    return await mystic.edit_text(_["play_3"])
+                    
+                if is_nsfw_content(details.get("title", "")):
+                    await send_security_log(message, "ɴsғᴡ ᴠɪᴏʟᴀᴛɪᴏɴ", details.get("title", ""))
+                    return await mystic.edit_text("**🚫 sᴇᴄᴜʀɪᴛʏ ᴀʟᴇʀᴛ: ᴀᴅᴜʟᴛ ᴄᴏɴᴛᴇɴᴛ ɪs sᴛʀɪᴄᴛʟʏ ᴘʀᴏʜɪʙɪᴛᴇᴅ!**")
+
                 streamtype = "youtube"
                 img = details["thumb"]
-                cap = _["play_11"].format(
-                    details["title"],
-                    details["duration_min"],
-                )
+                cap = _["play_11"].format(details["title"], details["duration_min"])
             else:
+                # Fallback for weird links
                 try:
                     details, track_id = await YouTube.track(url)
                 except Exception as e:
                     print(e)
                     return await mystic.edit_text(_["play_3"])
+                    
+                if is_nsfw_content(details.get("title", "")):
+                    await send_security_log(message, "ɴsғᴡ ᴠɪᴏʟᴀᴛɪᴏɴ", details.get("title", ""))
+                    return await mystic.edit_text("**🚫 sᴇᴄᴜʀɪᴛʏ ᴀʟᴇʀᴛ: ᴀᴅᴜʟᴛ ᴄᴏɴᴛᴇɴᴛ ɪs sᴛʀɪᴄᴛʟʏ ᴘʀᴏʜɪʙɪᴛᴇᴅ!**")
+
                 streamtype = "youtube"
                 img = details["thumb"]
-                cap = _["play_11"].format(
-                    details["title"],
-                    details["duration_min"],
-                )
+                cap = _["play_11"].format(details["title"], details["duration_min"])
+                
         elif await Spotify.valid(url):
             spotify = True
             if not config.SPOTIFY_CLIENT_ID and not config.SPOTIFY_CLIENT_SECRET:
-                return await mystic.edit_text(
-                    "» sᴘᴏᴛɪғʏ ɪs ɴᴏᴛ sᴜᴘᴘᴏʀᴛᴇᴅ ʏᴇᴛ.\n\nᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ ʟᴀᴛᴇʀ."
-                )
+                return await mystic.edit_text("» sᴘᴏᴛɪғʏ ɪs ɴᴏᴛ sᴜᴘᴘᴏʀᴛᴇᴅ ʏᴇᴛ.\n\nᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ ʟᴀᴛᴇʀ.")
             if "track" in url:
                 try:
                     details, track_id = await Spotify.track(url)
                 except:
                     return await mystic.edit_text(_["play_3"])
+                    
+                if is_nsfw_content(details.get("title", "")):
+                    await send_security_log(message, "ɴsғᴡ ᴠɪᴏʟᴀᴛɪᴏɴ", details.get("title", ""))
+                    return await mystic.edit_text("**🚫 sᴇᴄᴜʀɪᴛʏ ᴀʟᴇʀᴛ: ᴀᴅᴜʟᴛ ᴄᴏɴᴛᴇɴᴛ ɪs sᴛʀɪᴄᴛʟʏ ᴘʀᴏʜɪʙɪᴛᴇᴅ!**")
+
                 streamtype = "youtube"
                 img = details["thumb"]
                 cap = _["play_10"].format(details["title"], details["duration_min"])
@@ -276,6 +387,11 @@ async def play_commnd(
                     details, track_id = await Apple.track(url)
                 except:
                     return await mystic.edit_text(_["play_3"])
+                    
+                if is_nsfw_content(details.get("title", "")):
+                    await send_security_log(message, "ɴsғᴡ ᴠɪᴏʟᴀᴛɪᴏɴ", details.get("title", ""))
+                    return await mystic.edit_text("**🚫 sᴇᴄᴜʀɪᴛʏ ᴀʟᴇʀᴛ: ᴀᴅᴜʟᴛ ᴄᴏɴᴛᴇɴᴛ ɪs sᴛʀɪᴄᴛʟʏ ᴘʀᴏʜɪʙɪᴛᴇᴅ!**")
+
                 streamtype = "youtube"
                 img = details["thumb"]
                 cap = _["play_10"].format(details["title"], details["duration_min"])
@@ -296,6 +412,11 @@ async def play_commnd(
                 details, track_id = await Resso.track(url)
             except:
                 return await mystic.edit_text(_["play_3"])
+                
+            if is_nsfw_content(details.get("title", "")):
+                await send_security_log(message, "ɴsғᴡ ᴠɪᴏʟᴀᴛɪᴏɴ", details.get("title", ""))
+                return await mystic.edit_text("**🚫 sᴇᴄᴜʀɪᴛʏ ᴀʟᴇʀᴛ: ᴀᴅᴜʟᴛ ᴄᴏɴᴛᴇɴᴛ ɪs sᴛʀɪᴄᴛʟʏ ᴘʀᴏʜɪʙɪᴛᴇᴅ!**")
+
             streamtype = "youtube"
             img = details["thumb"]
             cap = _["play_10"].format(details["title"], details["duration_min"])
@@ -307,12 +428,22 @@ async def play_commnd(
             duration_sec = details["duration_sec"]
             if duration_sec > config.DURATION_LIMIT:
                 return await mystic.edit_text(
-                    _["play_6"].format(config.DURATION_LIMIT_MIN, app.mention)
+                    _["play_6"].format(
+                        config.DURATION_LIMIT_MIN,
+                        app.mention,
+                    )
                 )
             try:
                 await stream(
-                    _, mystic, user_id, details, chat_id, user_name,
-                    message.chat.id, streamtype="soundcloud", forceplay=fplay,
+                    _,
+                    mystic,
+                    user_id,
+                    details,
+                    chat_id,
+                    user_name,
+                    message.chat.id,
+                    streamtype="soundcloud",
+                    forceplay=fplay,
                 )
             except Exception as e:
                 ex_type = type(e).__name__
@@ -337,8 +468,16 @@ async def play_commnd(
             await mystic.edit_text(_["str_2"])
             try:
                 await stream(
-                    _, mystic, message.from_user.id, url, chat_id, message.from_user.first_name,
-                    message.chat.id, video=video, streamtype="index", forceplay=fplay,
+                    _,
+                    mystic,
+                    message.from_user.id,
+                    url,
+                    chat_id,
+                    message.from_user.first_name,
+                    message.chat.id,
+                    video=video,
+                    streamtype="index",
+                    forceplay=fplay,
                 )
             except Exception as e:
                 ex_type = type(e).__name__
@@ -349,9 +488,7 @@ async def play_commnd(
                     LOGGER(__name__).error(ex_type, exc_info=True)
                 return await mystic.edit_text(err)
             return await play_logs(message, streamtype="M3u8 or Index Link")
-
     else:
-        # ✅ FIX: Handle /play with no arguments (Send Random Photo + Spoiler)
         if len(message.command) < 2:
             buttons = botplaylist_markup(_)
             await mystic.delete()
@@ -364,20 +501,31 @@ async def play_commnd(
             
         slider = True
         query = message.text.split(None, 1)[1]
-        
-        # 🛡️ SECURITY: Check Text Query for Injection
-        if not is_safe_input(query):
-            LOGGER(__name__).warning(f"Malicious Text Query blocked from {user_id}")
-            return await mystic.edit_text("❌ **Security Alert:** Malicious search query detected.")
-
         if "-v" in query:
             query = query.replace("-v", "")
+            
+        # ✅ URL CLEANER FOR TEXT QUERIES (Fixes when bad links bypass the URL check)
+        clean_url, ext_id, y_type = clean_youtube_url(query)
+        if y_type == "video":
+            query = clean_url
+            
+        # 🛑 NSFW BLOCK
+        if is_nsfw_content(query):
+            await send_security_log(message, "ɴsғᴡ ᴠɪᴏʟᴀᴛɪᴏɴ", query)
+            return await mystic.edit_text("**🚫 sᴇᴄᴜʀɪᴛʏ ᴀʟᴇʀᴛ: ᴀᴅᴜʟᴛ ᴄᴏɴᴛᴇɴᴛ ɪs sᴛʀɪᴄᴛʟʏ ᴘʀᴏʜɪʙɪᴛᴇᴅ!**")
+
         try:
             details, track_id = await YouTube.track(query)
         except:
             return await mystic.edit_text(_["play_3"])
-        streamtype = "youtube"
+            
+        # 🛑 Final check after fetching data
+        if is_nsfw_content(details.get("title", "")):
+            await send_security_log(message, "ɴsғᴡ ᴠɪᴏʟᴀᴛɪᴏɴ", details.get("title", ""))
+            return await mystic.edit_text("**🚫 sᴇᴄᴜʀɪᴛʏ ᴀʟᴇʀᴛ: ᴀᴅᴜʟᴛ ᴄᴏɴᴛᴇɴᴛ ɪs sᴛʀɪᴄᴛʟʏ ᴘʀᴏʜɪʙɪᴛᴇᴅ!**")
 
+        streamtype = "youtube"
+        
     if str(playmode) == "Direct":
         if not plist_type:
             if details["duration_min"]:
@@ -388,17 +536,30 @@ async def play_commnd(
                     )
             else:
                 buttons = livestream_markup(
-                    _, track_id, user_id, "v" if video else "a",
-                    "c" if channel else "g", "f" if fplay else "d",
+                    _,
+                    track_id,
+                    user_id,
+                    "v" if video else "a",
+                    "c" if channel else "g",
+                    "f" if fplay else "d",
                 )
                 return await mystic.edit_text(
-                    _["play_13"], reply_markup=InlineKeyboardMarkup(buttons),
+                    _["play_13"],
+                    reply_markup=InlineKeyboardMarkup(buttons),
                 )
         try:
             await stream(
-                _, mystic, user_id, details, chat_id, user_name,
-                message.chat.id, video=video, streamtype=streamtype,
-                spotify=spotify, forceplay=fplay,
+                _,
+                mystic,
+                user_id,
+                details,
+                chat_id,
+                user_name,
+                message.chat.id,
+                video=video,
+                streamtype=streamtype,
+                spotify=spotify,
+                forceplay=fplay,
             )
         except Exception as e:
             ex_type = type(e).__name__
@@ -417,8 +578,12 @@ async def play_commnd(
             )
             lyrical[ran_hash] = plist_id
             buttons = playlist_markup(
-                _, ran_hash, message.from_user.id, plist_type,
-                "c" if channel else "g", "f" if fplay else "d",
+                _,
+                ran_hash,
+                message.from_user.id,
+                plist_type,
+                "c" if channel else "g",
+                "f" if fplay else "d",
             )
             await mystic.delete()
             
@@ -432,8 +597,13 @@ async def play_commnd(
         else:
             if slider:
                 buttons = slider_markup(
-                    _, track_id, message.from_user.id, query, 0,
-                    "c" if channel else "g", "f" if fplay else "d",
+                    _,
+                    track_id,
+                    message.from_user.id,
+                    query,
+                    0,
+                    "c" if channel else "g",
+                    "f" if fplay else "d",
                 )
                 await mystic.delete()
                 
@@ -449,8 +619,11 @@ async def play_commnd(
                 return await play_logs(message, streamtype=f"Searched on Youtube")
             else:
                 buttons = track_markup(
-                    _, track_id, message.from_user.id,
-                    "c" if channel else "g", "f" if fplay else "d",
+                    _,
+                    track_id,
+                    message.from_user.id,
+                    "c" if channel else "g",
+                    "f" if fplay else "d",
                 )
                 await mystic.delete()
                 
@@ -462,7 +635,7 @@ async def play_commnd(
                 )
                 return await play_logs(message, streamtype=f"URL Searched Inline")
 
-# ✅ FIX: Fixed the syntax error at the end of the file.
+
 @app.on_callback_query(filters.regex("MusicStream") & ~BANNED_USERS)
 @languageCB
 async def play_music(client, CallbackQuery, _):
@@ -487,10 +660,36 @@ async def play_music(client, CallbackQuery, _):
     mystic = await CallbackQuery.message.reply_text(
         _["play_2"].format(channel) if channel else _["play_1"]
     )
-    
-    # Structure aur syntax complete kar diya gaya hai
     try:
-        details, track_id = await YouTube.track(vidid)
+        details, track_id = await YouTube.track(vidid, True)
+    except:
+        return await mystic.edit_text(_["play_3"])
+        
+    if is_nsfw_content(details.get("title", "")):
+        return await mystic.edit_text("**🚫 sᴇᴄᴜʀɪᴛʏ ᴀʟᴇʀᴛ: ᴀᴅᴜʟᴛ ᴄᴏɴᴛᴇɴᴛ ɪs sᴛʀɪᴄᴛʟʏ ᴘʀᴏʜɪʙɪᴛᴇᴅ!**")
+
+    if details["duration_min"]:
+        duration_sec = time_to_seconds(details["duration_min"])
+        if duration_sec > config.DURATION_LIMIT:
+            return await mystic.edit_text(
+                _["play_6"].format(config.DURATION_LIMIT_MIN, app.mention)
+            )
+    else:
+        buttons = livestream_markup(
+            _,
+            track_id,
+            CallbackQuery.from_user.id,
+            mode,
+            "c" if cplay == "c" else "g",
+            "f" if fplay else "d",
+        )
+        return await mystic.edit_text(
+            _["play_13"],
+            reply_markup=InlineKeyboardMarkup(buttons),
+        )
+    video = True if mode == "v" else None
+    ffplay = True if fplay == "f" else None
+    try:
         await stream(
             _,
             mystic,
@@ -499,12 +698,184 @@ async def play_music(client, CallbackQuery, _):
             chat_id,
             user_name,
             CallbackQuery.message.chat.id,
-            video=False,
+            video,
             streamtype="youtube",
-            forceplay=fplay,
+            forceplay=ffplay,
         )
-        await mystic.delete()
     except Exception as e:
         ex_type = type(e).__name__
-        err = _["general_2"].format(ex_type)
+        if ex_type == "AssistantErr":
+            err = e 
+        else:
+            err = _["general_2"].format(ex_type)
+            LOGGER(__name__).error(ex_type, exc_info=True)
         return await mystic.edit_text(err)
+    return await mystic.delete()
+
+
+@app.on_callback_query(filters.regex("ZEOmousAdmin") & ~BANNED_USERS)
+async def SHUKLAmous_check(client, CallbackQuery):
+    try:
+        await CallbackQuery.answer(
+            "» ʀᴇᴠᴇʀᴛ ʙᴀᴄᴋ ᴛᴏ ᴜsᴇʀ ᴀᴄᴄᴏᴜɴᴛ :\n\nᴏᴘᴇɴ ʏᴏᴜʀ ɢʀᴏᴜᴘ sᴇᴛᴛɪɴɢs.\n-> ᴀᴅᴍɪɴɪsᴛʀᴀᴛᴏʀs\n-> ᴄʟɪᴄᴋ ᴏɴ ʏᴏᴜʀ ɴᴀᴍᴇ\n-> ᴜɴᴄʜᴇᴄᴋ ᴀɴᴏɴʏᴍᴏᴜs ᴀᴅᴍɪɴ ᴘᴇʀᴍɪssɪᴏɴs.",
+            show_alert=True,
+        )
+    except:
+        pass
+
+
+@app.on_callback_query(filters.regex("ZEOPlaylists") & ~BANNED_USERS)
+@languageCB
+async def play_playlists_command(client, CallbackQuery, _):
+    callback_data = CallbackQuery.data.strip()
+    callback_request = callback_data.split(None, 1)[1]
+    (
+        videoid,
+        user_id,
+        ptype,
+        mode,
+        cplay,
+        fplay,
+    ) = callback_request.split("|")
+    if CallbackQuery.from_user.id != int(user_id):
+        try:
+            return await CallbackQuery.answer(_["playcb_1"], show_alert=True)
+        except:
+            return
+    try:
+        chat_id, channel = await get_channeplayCB(_, cplay, CallbackQuery)
+    except:
+        return
+    user_name = CallbackQuery.from_user.first_name
+    await CallbackQuery.message.delete()
+    try:
+        await CallbackQuery.answer()
+    except:
+        pass
+    mystic = await CallbackQuery.message.reply_text(
+        _["play_2"].format(channel) if channel else _["play_1"]
+    )
+    videoid = lyrical.get(videoid)
+    video = True if mode == "v" else None
+    ffplay = True if fplay == "f" else None
+    spotify = True
+    if ptype == "yt":
+        spotify = False
+        try:
+            result = await YouTube.playlist(
+                videoid,
+                config.PLAYLIST_FETCH_LIMIT,
+                CallbackQuery.from_user.id,
+                True,
+            )
+        except:
+            return await mystic.edit_text(_["play_3"])
+    if ptype == "spplay":
+        try:
+            result, spotify_id = await Spotify.playlist(videoid)
+        except:
+            return await mystic.edit_text(_["play_3"])
+    if ptype == "spalbum":
+        try:
+            result, spotify_id = await Spotify.album(videoid)
+        except:
+            return await mystic.edit_text(_["play_3"])
+    if ptype == "spartist":
+        try:
+            result, spotify_id = await Spotify.artist(videoid)
+        except:
+            return await mystic.edit_text(_["play_3"])
+    if ptype == "apple":
+        try:
+            result, apple_id = await Apple.playlist(videoid, True)
+        except:
+            return await mystic.edit_text(_["play_3"])
+    try:
+        await stream(
+            _,
+            mystic,
+            user_id,
+            result,
+            chat_id,
+            user_name,
+            CallbackQuery.message.chat.id,
+            video,
+            streamtype="playlist",
+            spotify=spotify,
+            forceplay=ffplay,
+        )
+    except Exception as e:
+        ex_type = type(e).__name__
+        if ex_type == "AssistantErr":
+            err = e
+        else:
+            err = _["general_2"].format(ex_type)
+            LOGGER(__name__).error(ex_type, exc_info=True)
+        return await mystic.edit_text(err)
+    return await mystic.delete()
+
+
+@app.on_callback_query(filters.regex("slider") & ~BANNED_USERS)
+@languageCB
+async def slider_queries(client, CallbackQuery, _):
+    callback_data = CallbackQuery.data.strip()
+    callback_request = callback_data.split(None, 1)[1]
+    (
+        what,
+        rtype,
+        query,
+        user_id,
+        cplay,
+        fplay,
+    ) = callback_request.split("|")
+    
+    if CallbackQuery.from_user.id != int(user_id):
+        try:
+            return await CallbackQuery.answer(_["playcb_1"], show_alert=True)
+        except:
+            return
+            
+    what = str(what)
+    rtype = int(rtype)
+    
+    if what == "F":
+        query_type = 0 if rtype == 9 else int(rtype + 1)
+        try:
+            await CallbackQuery.answer(_["playcb_2"])
+        except:
+            pass
+            
+        title, duration_min, thumbnail, vidid = await YouTube.slider(query, query_type)
+        
+        if is_nsfw_content(title):
+            try: await CallbackQuery.message.delete()
+            except: pass
+            return await app.send_message(CallbackQuery.message.chat.id, "**🚫 sᴇᴄᴜʀɪᴛʏ ᴀʟᴇʀᴛ: ᴀᴅᴜʟᴛ ᴄᴏɴᴛᴇɴᴛ ɪs sᴛʀɪᴄᴛʟʏ ᴘʀᴏʜɪʙɪᴛᴇᴅ!**")
+
+        buttons = slider_markup(_, vidid, user_id, query, query_type, cplay, fplay)
+        
+        return await CallbackQuery.edit_message_media(
+            media=InputMediaPhoto(media=thumbnail, caption=_["play_10"].format(title.title(), duration_min), has_spoiler=True),
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    
+    if what == "B":
+        query_type = 9 if rtype == 0 else int(rtype - 1)
+        try:
+            await CallbackQuery.answer(_["playcb_2"])
+        except:
+            pass
+            
+        title, duration_min, thumbnail, vidid = await YouTube.slider(query, query_type)
+        
+        if is_nsfw_content(title):
+            try: await CallbackQuery.message.delete()
+            except: pass
+            return await app.send_message(CallbackQuery.message.chat.id, "**🚫 sᴇᴄᴜʀɪᴛʏ ᴀʟᴇʀᴛ: ᴀᴅᴜʟᴛ ᴄᴏɴᴛᴇɴᴛ ɪs sᴛʀɪᴄᴛʟʏ ᴘʀᴏʜɪʙɪᴛᴇᴅ!**")
+
+        buttons = slider_markup(_, vidid, user_id, query, query_type, cplay, fplay)
+        
+        return await CallbackQuery.edit_message_media(
+            media=InputMediaPhoto(media=thumbnail, caption=_["play_10"].format(title.title(), duration_min), has_spoiler=True),
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
