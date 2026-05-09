@@ -41,7 +41,7 @@ GIT_TOKEN = getenv("GIT_TOKEN", "")
 
 SUPPORT_CHANNEL = getenv("SUPPORT_CHANNEL", "https://t.me/MusicXUpdate")
 SUPPORT_CHAT = getenv("SUPPORT_CHAT", "https://t.me/GUPTA_JI_OP")
-GITHUB = getenv("GITHUB", "https://t.me/LuckyXSupport")
+GITHUB = getenv("GITHUB", "https://t.me/Gupta_ji_op")
 
 AUTO_LEAVING_ASSISTANT = getenv("AUTO_LEAVING_ASSISTANT", "False")
 AUTO_LEAVE_ASSISTANT_TIME = int(getenv("ASSISTANT_LEAVE_TIME", "9000"))
