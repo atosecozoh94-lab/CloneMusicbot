@@ -7,7 +7,7 @@ from PritiMusic.utils.decorators.language import language
 
 # Main Bot Link (Where users can create a clone)
 # Ideally, this should be in config, but hardcoding here works too.
-BOT_LINK = "https://t.me/CLONNE_MUSIC_BOT?start=_tgr_QHn2CMQ5Njc1"
+BOT_LINK = "https://t.me/CLOONE_MUSIC_BOT?start=_tgr_QHn2CMQ5Njc1"
 
 # ✅ Helper to safely get Random Start Image
 def get_random_start_img():
@@ -15,7 +15,7 @@ def get_random_start_img():
         if isinstance(config.START_IMG_URL, list):
             return random.choice(config.START_IMG_URL)
         return config.START_IMG_URL
-    return "https://telegra.ph/file/2e3d368e77c449c287430.jpg" # Fallback Image
+    return "https://graph.org/file/b0c653f31190c72a55060-854eb9a703f571d442.mp4" # Fallback Image
 
 @Client.on_message(filters.command("clone"))
 @language
