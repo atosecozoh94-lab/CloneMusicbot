@@ -15,7 +15,7 @@ OWNER_USERNAME = getenv("OWNER_USERNAME", "")
 BOT_USERNAME = getenv("BOT_USERNAME", "")
 BOT_NAME = getenv("BOT_NAME", "")
 ASSUSERNAME = getenv("ASSUSERNAME", "")
-BOT_LINK = getenv("BOT_LINK", "https://t.me/CLONNE_MUSIC_BOT?start=_tgr_QHn2CMQ5Njc1")
+BOT_LINK = getenv("BOT_LINK", "https://t.me/CLOONE_MUSIC_BOT?start=_tgr_QHn2CMQ5Njc1")
 
 MONGO_DB_URI = getenv("MONGO_DB_URI")
 
@@ -68,9 +68,9 @@ votemode = {}
 autoclean = []
 confirmer = {}
 
-START_IMG_URL = getenv("START_IMG_URL", "https://files.catbox.moe/37vii3.jpg").split()
+START_IMG_URL = getenv("START_IMG_URL", "https://graph.org/file/00e998a79b57a22c3a5df-237ef60d9c4f2b942c.jpg").split()
 HELP_IMG_URL = getenv("HELP_IMG_URL", "https://files.catbox.moe/u8ray8.jpg").split()
-PING_IMG_URL = getenv("PING_IMG_URL", "https://files.catbox.moe/37vii3.jpg").split()
+PING_IMG_URL = getenv("PING_IMG_URL", "https://graph.org/file/b0c653f31190c72a55060-854eb9a703f571d442.mp4").split()
 
 PLAYLIST_IMG_URL = getenv("PLAYLIST_IMG_URL", "https://i.ibb.co/gL3ykkyh/play-music.jpg").split()
 STATS_IMG_URL = getenv("STATS_IMG_URL", "https://i.ibb.co/pBqPtFYn/statistics.jpg").split()
