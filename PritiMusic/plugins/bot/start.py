@@ -108,7 +108,7 @@ async def start_pm(client, message: Message, _):
         # This part requires Pyrofork >= 2.2.20
         await message.reply_photo(
             random.choice(START_IMG_URL),
-            message_effect_id=random.choice(EFFECT_ID),  # Effect ID line enabled
+            # message_effect_id=random.choice(EFFECT_ID),  <-- YAHI LINE 109 ERROR DE RAHI THI, Ise comment kar diya hai
             caption=_["start_2"].format(message.from_user.mention, app.mention),
             reply_markup=InlineKeyboardMarkup(out),
         )
