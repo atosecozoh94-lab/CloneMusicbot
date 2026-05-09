@@ -69,71 +69,105 @@ async def get_thumb(videoid):
                     await f.write(await resp.read())
                     await f.close()
 
+        # ==========================================
+        # 🔥 IMAGE PROCESSING START (AWESOME LOOK) 🔥
+        # ==========================================
         youtube = Image.open(f"cache/thumb{videoid}.png")
         image1 = changeImageSize(1280, 720, youtube)
         image2 = image1.convert("RGBA")
-        background = image2.filter(filter=ImageFilter.BoxBlur(10))
+        
+        # 1. Premium Blurred Dark Background
+        background = image2.filter(filter=ImageFilter.GaussianBlur(15)) # GaussianBlur looks smoother
         enhancer = ImageEnhance.Brightness(background)
-        background = enhancer.enhance(0.5)
+        background = enhancer.enhance(0.4) # Darkened for better text visibility
+        
+        # 2. Add Sharp Original Thumbnail in the center (Sleek UI)
+        sharp_thumb = changeImageSize(768, 432, youtube).convert("RGBA")
+        background.paste(sharp_thumb, (256, 70)) # Centered horizontally
+        
         draw = ImageDraw.Draw(background)
         
+        # 3. Fonts Setup (Added proper hierarchy)
         try:
             arial = ImageFont.truetype("PritiMusic/assets/font2.ttf", 30)
-            font = ImageFont.truetype("PritiMusic/assets/font.ttf", 30)
+            font = ImageFont.truetype("PritiMusic/assets/font.ttf", 40) # Larger for Title
+            small_font = ImageFont.truetype("PritiMusic/assets/font2.ttf", 25) # Smaller for extra details
         except:
             arial = ImageFont.load_default()
             font = ImageFont.load_default()
+            small_font = ImageFont.load_default()
             
-        # Handling Font Size (Compatible with old & new Pillow versions)
+        # 4. Watermark (Top Right)
+        bot_name = "CLONNE MUSIC BOT"
         try:
-            # New Pillow
-            left, top, right, bottom = draw.textbbox((0, 0), "CLONNE MUSIC BOT    ", font=font)
+            left, top, right, bottom = draw.textbbox((0, 0), bot_name, font=small_font)
             text_width = right - left
         except:
-            # Old Pillow
             try:
-                text_width, _ = draw.textsize("CLONNE MUSIC BOT    ", font=font)
+                text_width, _ = draw.textsize(bot_name, font=small_font)
             except:
-                text_width = 300
+                text_width = 250
 
-        draw.text((1280 - text_width - 10, 10), "CLONNE MUSIC BOT    ", fill="green", font=font)
+        # Subtly placed watermark
+        draw.text((1280 - text_width - 30, 25), bot_name, fill="#1DB954", font=small_font)
         
+        # 5. Track Info (Title, Channel, Views)
         draw.text(
-            (55, 560),
-            f"{channel} | {views[:23]}",
-            (255, 255, 255),
-            font=arial,
-        )
-        draw.text(
-            (57, 600),
+            (256, 520),
             clear(title),
-            (255, 255, 255),
+            fill=(255, 255, 255), # Pure White
             font=font,
         )
+        draw.text(
+            (256, 575),
+            f"👤 {channel}   |   👁️ {views[:23]}",
+            fill=(200, 200, 200), # Light Grey for subtitle
+            font=arial,
+        )
+        
+        # 6. Two-Tone Modern Progress Bar
+        theme_color = "#1DB954" # Premium Green color (You can change to "#FF0000" for Red)
+        
+        # Empty part of the line (Grey)
         draw.line(
             [(55, 660), (1220, 660)],
-            fill="white",
-            width=5,
+            fill="#555555",
+            width=8,
             joint="curve",
         )
+        # Played part of the line (Theme Color)
+        draw.line(
+            [(55, 660), (400, 660)],
+            fill=theme_color,
+            width=8,
+            joint="curve",
+        )
+        # Playhead Scrubber (Circle)
         draw.ellipse(
-            [(918, 648), (942, 672)],
-            outline="white",
-            fill="white",
+            [(390, 648), (414, 672)],
+            outline=theme_color,
+            fill=theme_color,
             width=15,
         )
+        
+        # 7. Timestamps
         draw.text(
-            (36, 685),
+            (55, 680),
             "00:00",
-            (255, 255, 255),
-            font=arial,
+            fill=(200, 200, 200),
+            font=small_font,
         )
         draw.text(
-            (1185, 685),
+            (1150, 680),
             f"{duration[:23]}",
-            (255, 255, 255),
-            font=arial,
+            fill=(200, 200, 200),
+            font=small_font,
         )
+        
+        # ==========================================
+        # 🔥 IMAGE PROCESSING END 🔥
+        # ==========================================
+
         try:
             os.remove(f"cache/thumb{videoid}.png")
         except:
@@ -145,3 +179,4 @@ async def get_thumb(videoid):
         print(e)
         # ✅ FIX: Return Single Random Image instead of List
         return get_random_fallback_img()
+        
