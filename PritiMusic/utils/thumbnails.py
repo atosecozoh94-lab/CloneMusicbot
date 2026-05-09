@@ -70,28 +70,28 @@ async def get_thumb(videoid):
                     await f.close()
 
         # ==========================================
-        # 🔥 IMAGE PROCESSING START (AWESOME LOOK) 🔥
+        # 🔥 IMAGE PROCESSING START (PERFECT ALIGNMENT) 🔥
         # ==========================================
         youtube = Image.open(f"cache/thumb{videoid}.png")
         image1 = changeImageSize(1280, 720, youtube)
         image2 = image1.convert("RGBA")
         
         # 1. Premium Blurred Dark Background
-        background = image2.filter(filter=ImageFilter.GaussianBlur(15)) # GaussianBlur looks smoother
+        background = image2.filter(filter=ImageFilter.GaussianBlur(15))
         enhancer = ImageEnhance.Brightness(background)
-        background = enhancer.enhance(0.4) # Darkened for better text visibility
+        background = enhancer.enhance(0.4)
         
-        # 2. Add Sharp Original Thumbnail in the center (Sleek UI)
+        # 2. Add Sharp Original Thumbnail in the center
         sharp_thumb = changeImageSize(768, 432, youtube).convert("RGBA")
-        background.paste(sharp_thumb, (256, 70)) # Centered horizontally
+        background.paste(sharp_thumb, (256, 50)) # Centered horizontally
         
         draw = ImageDraw.Draw(background)
         
-        # 3. Fonts Setup (Added proper hierarchy)
+        # 3. Fonts Setup
         try:
             arial = ImageFont.truetype("PritiMusic/assets/font2.ttf", 30)
-            font = ImageFont.truetype("PritiMusic/assets/font.ttf", 40) # Larger for Title
-            small_font = ImageFont.truetype("PritiMusic/assets/font2.ttf", 25) # Smaller for extra details
+            font = ImageFont.truetype("PritiMusic/assets/font.ttf", 40) 
+            small_font = ImageFont.truetype("PritiMusic/assets/font2.ttf", 25) 
         except:
             arial = ImageFont.load_default()
             font = ImageFont.load_default()
@@ -108,43 +108,52 @@ async def get_thumb(videoid):
             except:
                 text_width = 250
 
-        # Subtly placed watermark
         draw.text((1280 - text_width - 30, 25), bot_name, fill="#1DB954", font=small_font)
         
+        # ==========================================
+        # ✅ FIX: PERFECT LEFT ALIGNMENT STRUCTURE 
+        # ==========================================
+        margin_x = 70  # Har cheez yahan se shuru hogi (= structure)
+        
         # 5. Track Info (Title, Channel, Views)
+        final_title = clear(title)
+        # Agar title bahut bada hai toh usko cut kar denge taaki screen ke bahar na jaye
+        if len(final_title) > 55:
+            final_title = final_title[:55] + "..."
+
         draw.text(
-            (256, 520),
-            clear(title),
-            fill=(255, 255, 255), # Pure White
+            (margin_x, 520),
+            final_title,
+            fill=(255, 255, 255), 
             font=font,
         )
         draw.text(
-            (256, 575),
+            (margin_x, 575),
             f"👤 {channel}   |   👁️ {views[:23]}",
-            fill=(200, 200, 200), # Light Grey for subtitle
+            fill=(200, 200, 200), 
             font=arial,
         )
         
-        # 6. Two-Tone Modern Progress Bar
-        theme_color = "#1DB954" # Premium Green color (You can change to "#FF0000" for Red)
+        # 6. Two-Tone Modern Progress Bar (Aligned with text)
+        theme_color = "#1DB954" 
         
-        # Empty part of the line (Grey)
+        # Empty Line
         draw.line(
-            [(55, 660), (1220, 660)],
+            [(margin_x, 650), (1210, 650)],
             fill="#555555",
             width=8,
             joint="curve",
         )
-        # Played part of the line (Theme Color)
+        # Played Line
         draw.line(
-            [(55, 660), (400, 660)],
+            [(margin_x, 650), (350, 650)],
             fill=theme_color,
             width=8,
             joint="curve",
         )
-        # Playhead Scrubber (Circle)
+        # Playhead Circle
         draw.ellipse(
-            [(390, 648), (414, 672)],
+            [(340, 638), (364, 662)],
             outline=theme_color,
             fill=theme_color,
             width=15,
@@ -152,13 +161,13 @@ async def get_thumb(videoid):
         
         # 7. Timestamps
         draw.text(
-            (55, 680),
+            (margin_x, 670),
             "00:00",
             fill=(200, 200, 200),
             font=small_font,
         )
         draw.text(
-            (1150, 680),
+            (1135, 670), # Right aligned
             f"{duration[:23]}",
             fill=(200, 200, 200),
             font=small_font,
@@ -177,6 +186,4 @@ async def get_thumb(videoid):
         
     except Exception as e:
         print(e)
-        # ✅ FIX: Return Single Random Image instead of List
         return get_random_fallback_img()
-        
