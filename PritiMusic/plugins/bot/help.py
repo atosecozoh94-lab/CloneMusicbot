@@ -17,7 +17,7 @@ def get_random_start_img():
         if isinstance(START_IMG_URL, list):
             return random.choice(START_IMG_URL)
         return START_IMG_URL
-    return "https://graph.org/file/d99280c14d0e2dd719a56-03933eeae68988a854.jpg" # Fallback
+    return "https://graph.org/file/b0c653f31190c72a55060-854eb9a703f571d442.mp4" # Fallback
 
 @app.on_message(filters.command(["help"]) & filters.private & ~BANNED_USERS)
 @app.on_callback_query(filters.regex("settings_back_helper") & ~BANNED_USERS)
