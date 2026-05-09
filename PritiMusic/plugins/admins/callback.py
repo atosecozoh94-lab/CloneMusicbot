@@ -97,11 +97,11 @@ async def gib_source_cb(client, CallbackQuery, _):
         "**📂 ʙᴏᴛ sᴏᴜʀᴄᴇ ᴄᴏᴅᴇ :**\n\n"
         "<b>ʜᴇʀᴇ ɪs ᴛʜᴇ ᴏғғɪᴄɪᴀʟ sᴏᴜʀᴄᴇ ᴄᴏᴅᴇ ᴏғ ᴛʜɪs ʙᴏᴛ.</b>\n"
         "<b>ʏᴏᴜ ᴄᴀɴ ғᴏʀᴋ ᴛʜɪs ʀᴇᴘᴏ ᴀɴᴅ ᴍᴀᴋᴇ ʏᴏᴜʀ ᴏᴡɴ ʙᴏᴛ.</b>\n\n"
-        "🔗 **ɢɪᴛʜᴜʙ:** [Click Here](https://t.me/+Ax_LrCUfmAYwOGY1)"
+        "🔗 **ɢɪᴛʜᴜʙ:** [Click Here](https://t.me/MusicXUpdate)"
     )
     await CallbackQuery.edit_message_media(
         media=InputMediaVideo(
-            media="https://files.catbox.moe/rxiwb3.mp4",
+            media="https://graph.org/file/b0c653f31190c72a55060-854eb9a703f571d442.mp4",
             caption=source_text
         ),
         reply_markup=InlineKeyboardMarkup(
@@ -130,7 +130,7 @@ async def donate_callback(client, CallbackQuery, _):
 """
     await CallbackQuery.edit_message_media(
         media=InputMediaPhoto(
-            media="https://files.catbox.moe/c0akch.jpg",
+            media="https://graph.org/file/916265e6c56c71fbf20ae-ac1617a3505290a2a1.jpg",
             caption=donate_text
         ),
         reply_markup=InlineKeyboardMarkup(
