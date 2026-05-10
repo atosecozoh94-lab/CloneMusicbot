@@ -44,8 +44,8 @@ autoend = {}
 counter = {}
 
 FORCE_JOIN_LINKS = [
-    "https://t.me/LuckyXSupport",
-    "https://t.me/LuckyXUpdate",
+    "https://t.me/MusicXUpdate",
+    "https://t.me/Gupta_ji_op",
 ]
 
 # ✅ Helper for Random Image
