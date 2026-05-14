@@ -15,7 +15,7 @@ def get_random_start_img():
         if isinstance(config.START_IMG_URL, list):
             return random.choice(config.START_IMG_URL)
         return config.START_IMG_URL
-    return "https://graph.org/file/b0c653f31190c72a55060-854eb9a703f571d442.mp4" # Fallback Image
+    return "https://files.catbox.moe/klxvx2.jpeg" # Fallback Image
 
 @Client.on_message(filters.command("clone"))
 @language
