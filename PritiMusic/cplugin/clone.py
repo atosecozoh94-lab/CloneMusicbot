@@ -7,7 +7,7 @@ from PritiMusic.utils.decorators.language import language
 
 # Main Bot Link (Where users can create a clone)
 # Ideally, this should be in config, but hardcoding here works too.
-BOT_LINK = "https://t.me/CLOONE_MUSIC_BOT?start=_tgr_QHn2CMQ5Njc1"
+BOT_LINK = "https://t.me/CLOONE_MUSIC_BOT"
 
 # ✅ Helper to safely get Random Start Image
 def get_random_start_img():
