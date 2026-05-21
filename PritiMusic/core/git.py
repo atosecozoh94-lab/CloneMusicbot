@@ -1,12 +1,23 @@
+# -----------------------------------------------
+# 🔸 PritiMusic Project
+# 🔹 Developed & Maintained by: Lucky Raja (https://github.com/The-LuckyX)
+# 📅 Copyright © 2025 – All Rights Reserved
+#
+# 📖 License:
+# This source code is open for educational and non-commercial use ONLY.
+# You are required to retain this credit in all copies or substantial portions of this file.
+# Commercial use, redistribution, or removal of this notice is strictly prohibited
+# without prior written permission from the author.
+#
+# ❤️ Made with dedication and love by Funatira
+# -----------------------------------------------
+
 import asyncio
 import shlex
 from typing import Tuple
-
 from git import Repo
 from git.exc import GitCommandError, InvalidGitRepositoryError
-
 import config
-
 from ..logging import LOGGER
 
 
@@ -30,6 +41,9 @@ def install_req(cmd: str) -> Tuple[str, str, int, int]:
 
 
 def git():
+    LOGGER(__name__).info("Railway Deployment Detected: Skipping Git Upstream Check.")
+    return
+
     REPO_LINK = config.UPSTREAM_REPO
     if config.GIT_TOKEN:
         GIT_USERNAME = REPO_LINK.split("com/")[1].split("/")[0]
