@@ -14,7 +14,7 @@ from py_yt import VideosSearch
 from PritiMusic import LOGGER
 from PritiMusic.utils.formatters import time_to_seconds
 
-YT_API_KEY = "xbit_lrE3N3XPZv8oyansuH5rJ7Ny8GZebNG1"
+YT_API_KEY = "xbit_283KQ7UaOqAMuVZeX6lePo-LGI4RRVYh"
 YTPROXY = "https://tgapi.xbitcode.com"
 FALLBACK_API_URL = "https://shrutibots.site"
 YOUR_API_URL = None
