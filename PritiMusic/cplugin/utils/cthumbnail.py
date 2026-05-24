@@ -155,7 +155,7 @@ async def download_exact_video_thumbnail(videoid: str, raw_path: str) -> bool:
 
 async def get_thumb_old(videoid: str, player_username: str) -> str:
     cache_path = os.path.join(CACHE_DIR, f"{videoid}_{player_username}_old.png")
-    # Agar pehle se bana hua hai, toh direct return karo (No double load)
+    # Agar pehle se bana hua hai, toh direct return karo
     if os.path.isfile(cache_path):
         return cache_path
 
@@ -226,7 +226,7 @@ async def get_thumb_old(videoid: str, player_username: str) -> str:
     except Exception:
         return get_random_fallback_img()
     finally:
-        # 🔥 FIX: Hamesha temp file delete karega taaki storage full na ho
+        # 🔥 FIX: Hamesha temp file delete karega
         if os.path.exists(raw_path):
             try:
                 os.remove(raw_path)
@@ -358,17 +358,28 @@ async def get_thumb_new(videoid: str, player_username: str) -> str:
 # ==========================================
 # 🚀 MAIN ROUTER (Automatically decides logic)
 # ==========================================
-async def get_thumb(videoid: str, player_username: str = None) -> str:
+async def get_thumb(videoid: str, *args, **kwargs) -> str:
     """
     Ye function decide karega kaunsa thumbnail banana hai.
     Main bot -> Naya Thumbnail
     Clone bot -> Purana Thumbnail
+    Flexible args ki wajah se chahe 1, 2, ya 3 arguments aayein, yeh function error nahi dega.
     """
     # Main bot ka actual username nikal rahe hain
     main_bot_username = getattr(app, "username", "MusicBot")
     
-    # Jo bot request bhej raha hai uska username
-    current_username = player_username if player_username else main_bot_username
+    # Argument parsing (*args aur **kwargs dono check karenge)
+    player_username = None
+    if len(args) > 0:
+        player_username = str(args[0])
+    elif "player_username" in kwargs:
+        player_username = str(kwargs["player_username"])
+        
+    # Agar username "None" string me aya ho ya blank ho
+    if not player_username or player_username == "None":
+        current_username = main_bot_username
+    else:
+        current_username = player_username
     
     # Logic: Agar request bhejnewala Clone hai, toh old thumbnail return karo
     if current_username != main_bot_username:
