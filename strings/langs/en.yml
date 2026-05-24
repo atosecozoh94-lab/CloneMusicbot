@@ -98,7 +98,7 @@ lang_3: "<blockquote><b>ғᴀɪʟᴇᴅ ᴛᴏ ᴄʜᴀɴɢᴇ ʟᴀɴɢᴜᴀɢ
 lang_4: "<blockquote><b>ʏᴏᴜ'ʀᴇ ᴀʟʀᴇᴀᴅʏ ᴏɴ ᴛʜᴇ sᴀᴍᴇ ʟᴀɴɢᴜᴀɢᴇ.</b></blockquote>"
 
 setting_1: "<blockquote><u><b>{0} sᴇᴛᴛɪɴɢs ᴘᴀɴᴇʟ</b></u>\n\n<b>ᴄʜᴀᴛ ɪᴅ :</b> <code>{1}</code>\n<b>ᴄʜᴀᴛ ᴛɪᴛʟᴇ :</b> {2}\n\nᴄʟɪᴄᴋ ᴏɴ ᴛʜᴇ ʙᴜᴛᴛᴏɴs ʙᴇʟᴏᴡ ғᴏʀ ᴄʜᴀɴɢɪɴɢ sᴇᴛᴛɪɴɢs.</blockquote>"
-setting_2: "<blockquote><b>» ᴅɪʀᴇᴄᴛ :</b> ᴘʟᴀʏs sᴇᴀʀᴄʜ ǫᴜᴇʀɪᴇs ᴅɪʀᴇᴄᴛʟʏ.\n\n<b>» ɪɴʟɪɴᴇ :</b> ʀᴇᴛᴜʀɴs ɪɴʟɪɴᴇ ʙᴜᴛᴛᴏɴs ғᴏʀ ᴄʜᴏᴏsɪɴɢ ʙᴇᴛᴡᴇᴇɴ ᴠɪᴅᴇᴏ & ᴀᴜᴅɪᴏ.</blockquote>"
+setting_2: "<blockquote><b>» ᴅɪʀᴇᴄᴛ :</b> ᴘʟᴀʏs sᴇᴀʀᴄʜ ǫᴜᴇʀɪᴇs ᴅɪʀᴇᴄᴛʟʏ.\n\n<b>» ɪɴʟɪɴᴇ :</b> ʀᴇᴛᴜʀɴs ɪɴʟɪɴᴇ ʙᴜᴛᴛᴏɴs ғᴏʀ ᴄʜᴏᴏsɪɴɢ ʙᴇᴛᴡᴇᴇ ᴠɪᴅᴇᴏ & ᴀᴜᴅɪᴏ.</blockquote>"
 setting_3: "<blockquote><b>» ᴇᴠᴇʀʏᴏɴᴇ :</b> ᴀɴʏᴏɴᴇ ᴄᴀɴ ᴜsᴇ ᴀᴅᴍɪɴ ᴄᴏᴍᴍᴀɴᴅs [sᴋɪᴘ, ᴘᴀᴜsᴇ, ʀᴇsᴜᴍᴇ ᴇᴛᴄ.] ᴘʀᴇsᴇɴᴛ ɪɴ ᴛʜɪs ɢʀᴏᴜᴘ.\n\n<b>» ᴀᴅᴍɪɴ ᴏɴʟʏ :</b> ᴏɴʟʏ ᴀᴅᴍɪɴs ᴀɴᴅ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀs ᴄᴀɴ ᴜsᴇ ᴀᴅᴍɪɴ ᴄᴏᴍᴍᴀɴᴅs.</blockquote>"
 setting_4: "<blockquote><b>» ɴᴏ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴜsᴇʀs ғᴏᴜɴᴅ.</b></blockquote>"
 setting_5: "<blockquote><b>» ɢʀᴏᴜᴘ :</b> ᴘʟᴀʏs ᴍᴜsɪᴄ ɪɴ ᴛʜᴇ ɢʀᴏᴜᴘ ᴡʜᴇʀᴇ ᴛʜᴇ ᴄᴏᴍᴍᴀɴᴅ ɪs ɢɪᴠᴇɴ.\n\n<b>» ᴄʜᴀɴɴᴇʟ :</b> ᴘʟᴀʏs ᴍᴜsɪᴄ ɪɴ ᴛʜᴇ ᴄʜᴀɴɴᴇʟ ʏᴏᴜ ᴡᴀɴᴛ.\nsᴇᴛ ᴄʜᴀɴɴᴇʟ ɪᴅ ᴠɪᴀ <b>/channelplay</b></blockquote>"
@@ -166,7 +166,7 @@ ping_2: "<blockquote expandable>{1}\n\n🏓 <b>ᴘᴏɴɢ :</b> <code>{0}ᴍs..<
 queue_1: "<blockquote><b>» ғᴇᴛᴄʜɪɴɢ ǫᴜᴇᴜᴇ...</b>\n\nᴘʟᴇᴀsᴇ ᴡᴀɪᴛ...</blockquote>"
 queue_2: "<blockquote><b>» ǫᴜᴇᴜᴇ ᴇᴍᴘᴛʏ.</b></blockquote>"
 queue_3: "<blockquote><b><u>» ᴄʟɪᴄᴋ ʜᴇʀᴇ ᴛᴏ ᴄʜᴇᴄᴋ ᴛʜᴇ ʟɪsᴛ ᴏғ ᴛʜᴇ ǫᴜᴇᴜᴇᴅ ᴛʀᴀᴄᴋs :</u></b> <a href={0}>ʜᴇʀᴇ</a></blockquote>"
-queue_4: "<blockquote><b>➲ ᴀᴅᴅᴇᴅ ᴛᴏ ǫᴜᴇᴜᴇ ᴀᴛ #{0}\n\n‣ ᴛɪᴛʟᴇ :</b> {1}\n<b>‣ ᴅᴜʀᴀᴛɪᴏɴ :</b> {2} ᴍɪɴᴜᴛᴇs\n<b>‣ ʙʏ :</b> {3}</blockquote>"
+queue_4: "<blockquote><b>✨ ᴛʀᴀᴄᴋ ʀᴇsᴇʀᴠᴇᴅ — ᴘʟᴀʏɪɴɢ sᴏᴏɴ : #{0}</b></blockquote>\n<blockquote><b>🎧 sᴏɴɢ :</b> {1}\n<b>⏱ ʟᴇɴɢᴛʜ :</b> {2} ᴍɪɴs\n<b>🥀 ʀᴇǫᴜᴇsᴛᴇʀ :</b> {3}</blockquote>"
 queue_5: "<blockquote><b>ᴛʜᴇʀᴇ's ᴏɴʟʏ ᴏɴᴇ ǫᴜᴇᴜᴇᴅ ᴛʀᴀᴄᴋ ɪɴ ᴘʟᴀʏʟɪsᴛ.</b>\n\nᴀᴅᴅ ᴍᴏʀᴇ ᴛʀᴀᴄᴋs ᴛᴏ ᴄʜᴇᴄᴋ ʟɪsᴛ.</blockquote>"
 queue_6: "<blockquote><b>❍ ᴅᴜʀᴀᴛɪᴏɴ :</b> ᴜɴᴋɴᴏᴡɴ ᴅᴜʀᴀᴛɪᴏɴ sᴛʀᴇᴀᴍ\n\nᴄʟɪᴄᴋ ᴏɴ ʙᴜᴛᴛᴏɴ ʙᴇʟᴏᴡ ᴛᴏ ɢᴇᴛ ᴡʜᴏʟᴇ ǫᴜᴇᴜᴇᴅ ʟɪsᴛ.</blockquote>"
 queue_7: "<blockquote>\n<b>ᴄʟɪᴄᴋ ᴏɴ ʙᴜᴛᴛᴏɴ ʙᴇʟᴏᴡ ᴛᴏ ɢᴇᴛ ᴡʜᴏʟᴇ ǫᴜᴇᴜᴇᴅ ʟɪsᴛ.</b></blockquote>"
