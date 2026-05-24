@@ -67,10 +67,10 @@ lyrical = {}
 votemode = {}
 autoclean = []
 confirmer = {}
-START_IMG_URL = getenv("START_IMG_URL", "https://graph.org/file/00e998a79b57a22c3a5df-237ef60d9c4f2b942c.jpg
+START_IMG_URL = getenv("START_IMG_URL", """https://graph.org/file/00e998a79b57a22c3a5df-237ef60d9c4f2b942c.jpg
 https://graph.org/file/a47a0cc6c5023dceacbd5-c0157bb8fdef9b14b5.jpg
 https://graph.org/file/f464ff7c9a134295011ff-f58e0c87cd8bf16b25.jpg
-https://graph.org/file/19b205e2c06e2f2cd5028-cf6d3c976e77d212ce.jpg").split()
+https://graph.org/file/19b205e2c06e2f2cd5028-cf6d3c976e77d212ce.jpg""").split()
 HELP_IMG_URL = getenv("HELP_IMG_URL", "https://files.catbox.moe/u8ray8.jpg").split()
 PING_IMG_URL = getenv("PING_IMG_URL", "https://graph.org/file/c733732aa48f1f437cff8-46db3ecea9f26bc132.jpg").split()
 
