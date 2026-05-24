@@ -1,6 +1,7 @@
 import os
 import re
 import random
+import time
 import aiofiles
 import aiohttp
 
@@ -28,209 +29,7 @@ def get_random_fallback_img():
 
 
 # ==========================================
-# 🟢 OLD THUMBNAIL LOGIC (STRICTLY FOR CLONE BOTS)
-# ==========================================
-def get_font(size: int, bold: bool = False):
-    font_candidates = [
-        os.path.join(ASSETS_DIR, "font2.ttf" if bold else "font.ttf"),
-        os.path.join(ASSETS_DIR, "Roboto-Bold.ttf" if bold else "Roboto-Regular.ttf"),
-        "arial.ttf",
-    ]
-    for path in font_candidates:
-        try:
-            return ImageFont.truetype(path, size=size)
-        except Exception:
-            continue
-    return ImageFont.load_default()
-
-def text_width(font, text: str) -> int:
-    try:
-        return int(font.getlength(text))
-    except Exception:
-        bbox = font.getbbox(text)
-        return bbox[2] - bbox[0]
-
-def trim_to_width_old(text: str, font, max_width: int) -> str:
-    text = str(text or "").strip()
-    if not text:
-        return "Unknown Title"
-    if text_width(font, text) <= max_width:
-        return text
-    ellipsis = "..."
-    for i in range(len(text), 0, -1):
-        candidate = text[:i].rstrip() + ellipsis
-        if text_width(font, candidate) <= max_width:
-            return candidate
-    return ellipsis
-
-def wrap_text_lines(text: str, font, max_width: int, max_lines: int = 2):
-    words = str(text or "").split()
-    if not words:
-        return ["Unknown Title"]
-    lines = []
-    current = ""
-    for word in words:
-        test = f"{current} {word}".strip()
-        if text_width(font, test) <= max_width:
-            current = test
-        else:
-            if current:
-                lines.append(current)
-            current = word
-            if len(lines) >= max_lines - 1:
-                break
-    if current and len(lines) < max_lines:
-        lines.append(current)
-    if not lines:
-        lines = ["Unknown Title"]
-    if len(lines) > max_lines:
-        lines = lines[:max_lines]
-    if len(lines) == max_lines:
-        lines[-1] = trim_to_width_old(lines[-1], font, max_width)
-    return lines[:max_lines]
-
-def make_progress_time(duration: str):
-    if not duration or ":" not in str(duration):
-        return "00:00", "03:00"
-    return "00:00", str(duration) 
-
-async def download_image(url: str, dest: str) -> bool:
-    try:
-        timeout = aiohttp.ClientTimeout(total=15)
-        headers = {"User-Agent": "Mozilla/5.0"}
-        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-            async with session.get(url) as resp:
-                if resp.status != 200:
-                    return False
-                data = await resp.read()
-                async with aiofiles.open(dest, "wb") as f:
-                    await f.write(data)
-        return True
-    except Exception:
-        return False
-
-def create_fallback_cover(size=(640, 640)):
-    img = Image.new("RGBA", size, (25, 30, 45, 255))
-    draw = ImageDraw.Draw(img)
-    draw.rounded_rectangle((40, 40, size[0] - 40, size[1] - 40), radius=35, fill=(40, 48, 72, 255))
-    draw.ellipse((210, 170, 430, 390), fill=(110, 120, 160, 255))
-    draw.rounded_rectangle((180, 380, 460, 560), radius=35, fill=(110, 120, 160, 255))
-    return img
-
-async def fetch_video_details(videoid: str):
-    title, artist, duration, views = "Unknown Title", "Unknown Artist", "03:00", "0 views"
-    try:
-        results = VideosSearch(videoid, limit=10)
-        search_result = await results.next()
-        items = search_result.get("result") or []
-        best_match = None
-        for item in items:
-            link = str(item.get("link", ""))
-            item_id = str(item.get("id", ""))
-            if f"watch?v={videoid}" in link or item_id == videoid:
-                best_match = item
-                break
-        if not best_match and items:
-            best_match = items[0]
-        if best_match:
-            title = best_match.get("title") or title
-            artist = (best_match.get("channel") or {}).get("name") or artist
-            duration = best_match.get("duration") or duration
-            views = (best_match.get("viewCount") or {}).get("short") or views
-    except Exception:
-        pass
-    return title, artist, duration, views
-
-async def download_exact_video_thumbnail(videoid: str, raw_path: str) -> bool:
-    thumb_candidates = [
-        f"https://i.ytimg.com/vi/{videoid}/maxresdefault.jpg",
-        f"https://i.ytimg.com/vi/{videoid}/sddefault.jpg",
-        f"https://i.ytimg.com/vi/{videoid}/hqdefault.jpg",
-    ]
-    for thumb_url in thumb_candidates:
-        ok = await download_image(thumb_url, raw_path)
-        if ok and os.path.exists(raw_path):
-            try:
-                if os.path.getsize(raw_path) > 1024:
-                    return True
-            except Exception:
-                return True
-    return False
-
-async def get_thumb_old(videoid: str, player_username: str) -> str:
-    cache_path = os.path.join(CACHE_DIR, f"{videoid}_{player_username}_old.png")
-    if os.path.isfile(cache_path):
-        return cache_path
-
-    try:
-        raw_path = os.path.join(CACHE_DIR, f"raw_{videoid}.jpg")
-        title, artist, duration, views = await fetch_video_details(videoid)
-        downloaded = await download_exact_video_thumbnail(videoid, raw_path)
-
-        W, H = 1280, 720
-        if downloaded and os.path.exists(raw_path):
-            try:
-                source = Image.open(raw_path).convert("RGBA")
-            except Exception:
-                source = create_fallback_cover()
-        else:
-            source = create_fallback_cover()
-
-        bg = source.resize((W, H), Image.LANCZOS)
-        bg = bg.filter(ImageFilter.GaussianBlur(radius=45))
-        bg = ImageEnhance.Brightness(bg).enhance(0.32)
-        bg = ImageEnhance.Contrast(bg).enhance(1.08)
-
-        dark = Image.new("RGBA", (W, H), (10, 12, 20, 110))
-        bg = Image.alpha_composite(bg, dark)
-
-        glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        gdraw = ImageDraw.Draw(glow)
-        gdraw.ellipse((40, 60, 420, 430), fill=(70, 110, 255, 55))
-        gdraw.ellipse((900, 70, 1260, 430), fill=(255, 80, 150, 45))
-        glow = glow.filter(ImageFilter.GaussianBlur(75))
-        bg = Image.alpha_composite(bg, glow)
-
-        draw = ImageDraw.Draw(bg)
-        title_font = get_font(48, bold=True)
-        artist_font = get_font(28, bold=False)
-        meta_font = get_font(24, bold=False)
-        badge_font = get_font(22, bold=True)
-        
-        cover_w, cover_h = 470, 470
-        cover_x, cover_y = 90, (H - cover_h) // 2
-        album = source.resize((cover_w, cover_h), Image.LANCZOS)
-        mask = Image.new("L", (cover_w, cover_h), 0)
-        ImageDraw.Draw(mask).rounded_rectangle((0, 0, cover_w, cover_h), radius=38, fill=255)
-        bg.paste(album, (cover_x, cover_y), mask)
-
-        panel_x1, panel_y1, panel_x2, panel_y2 = 620, cover_y, W - 60, cover_y + cover_h
-        panel = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        ImageDraw.Draw(panel).rounded_rectangle((panel_x1, panel_y1, panel_x2, panel_y2), radius=34, fill=(255, 255, 255, 22))
-        bg = Image.alpha_composite(bg, panel)
-        draw = ImageDraw.Draw(bg)
-
-        badge_text = f"Now Playing • @{player_username}"
-        draw.text((panel_x1 + 36 + 18, panel_y1 + 28 + 9), badge_text, font=badge_font, fill=(255, 255, 255, 240))
-
-        title_lines = wrap_text_lines(title, title_font, panel_x2 - panel_x1 - 72, max_lines=2)
-        for idx, line in enumerate(title_lines):
-            draw.text((panel_x1 + 36, panel_y1 + 95 + (idx * 58)), line, font=title_font, fill=(255, 255, 255, 255))
-        
-        draw.text((panel_x1 + 36, panel_y1 + 225), f"By {artist}", font=artist_font, fill=(210, 215, 225, 235))
-        draw.text((panel_x1 + 36, panel_y1 + 270), f"Views • {views}", font=meta_font, fill=(170, 180, 195, 235))
-
-        final_img = bg.convert("RGB")
-        final_img.save(cache_path, quality=95)
-        if os.path.exists(raw_path):
-            os.remove(raw_path)
-        return cache_path
-    except Exception:
-        return get_random_fallback_img()
-
-
-# ==========================================
-# 🔴 NEW THUMBNAIL LOGIC (STRICTLY FOR MAIN BOT)
+# 🔴 NEW THUMBNAIL LOGIC (FOR MAIN BOT)
 # ==========================================
 PANEL_W, PANEL_H = 763, 545
 PANEL_X = (1280 - PANEL_W) // 2
@@ -252,7 +51,7 @@ ICONS_X = PANEL_X + (PANEL_W - ICONS_W) // 2
 ICONS_Y = BAR_Y + 48
 MAX_TITLE_WIDTH = 580
 
-def trim_to_width_new(text: str, font, max_w: int) -> str:
+def trim_to_width(text: str, font, max_w: int) -> str:
     ellipsis = "…"
     if font.getlength(text) <= max_w:
         return text
@@ -261,10 +60,17 @@ def trim_to_width_new(text: str, font, max_w: int) -> str:
             return text[:i] + ellipsis
     return ellipsis
 
-async def get_thumb_new(videoid: str, player_username: str) -> str:
-    cache_path = os.path.join(CACHE_DIR, f"{videoid}_{player_username}_new.png")
+async def get_thumb(videoid: str, player_username: str = None) -> str:
+    # Final thumbnail path
+    cache_path = os.path.join(CACHE_DIR, f"{videoid}_main_new.png")
+    
+    # Agar thumbnail pehle se bana hua hai, toh seedha yahi se return karo
     if os.path.exists(cache_path):
         return cache_path
+
+    # 🔥 FIX: Unique temp file naam taaki file overwrite ki wajah se do alag thumbnail mix na ho
+    unique_id = f"{videoid}_{int(time.time())}_{random.randint(100, 999)}"
+    thumb_path = os.path.join(CACHE_DIR, f"raw_main_{unique_id}.png")
 
     try:
         results = VideosSearch(f"https://www.youtube.com/watch?v={videoid}", limit=1)
@@ -281,7 +87,7 @@ async def get_thumb_new(videoid: str, player_username: str) -> str:
         is_live = not duration or str(duration).strip().lower() in {"", "live", "live now"}
         duration_text = "Live" if is_live else duration or "Unknown Mins"
 
-        thumb_path = os.path.join(CACHE_DIR, f"thumb_new_{videoid}.png")
+        # Image download karna (safe tarike se)
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(thumbnail) as resp:
@@ -291,6 +97,7 @@ async def get_thumb_new(videoid: str, player_username: str) -> str:
         except Exception:
             return get_random_fallback_img()
 
+        # Image Processing (Blur, Brightness, Panel)
         base = Image.open(thumb_path).resize((1280, 720)).convert("RGBA")
         bg = ImageEnhance.Brightness(base.filter(ImageFilter.BoxBlur(10))).enhance(0.6)
 
@@ -313,9 +120,11 @@ async def get_thumb_new(videoid: str, player_username: str) -> str:
         ImageDraw.Draw(tmask).rounded_rectangle((0, 0, THUMB_W, THUMB_H), 20, fill=255)
         bg.paste(thumb, (THUMB_X, THUMB_Y), tmask)
 
-        draw.text((TITLE_X, TITLE_Y), trim_to_width_new(title, title_font, MAX_TITLE_WIDTH), fill="black", font=title_font)
+        # Title aur Views likhna
+        draw.text((TITLE_X, TITLE_Y), trim_to_width(title, title_font, MAX_TITLE_WIDTH), fill="black", font=title_font)
         draw.text((META_X, META_Y), f"YouTube | {views}", fill="black", font=regular_font)
 
+        # Progress bar draw karna
         draw.line([(BAR_X, BAR_Y), (BAR_X + BAR_RED_LEN, BAR_Y)], fill="red", width=6)
         draw.line([(BAR_X + BAR_RED_LEN, BAR_Y), (BAR_X + BAR_TOTAL_LEN, BAR_Y)], fill="gray", width=5)
         draw.ellipse([(BAR_X + BAR_RED_LEN - 7, BAR_Y - 7), (BAR_X + BAR_RED_LEN + 7, BAR_Y + 7)], fill="red")
@@ -324,6 +133,7 @@ async def get_thumb_new(videoid: str, player_username: str) -> str:
         end_text = "Live" if is_live else duration_text
         draw.text((BAR_X + BAR_TOTAL_LEN - (90 if is_live else 60), BAR_Y + 15), end_text, fill="red" if is_live else "black", font=regular_font)
 
+        # Play icons lagana
         icons_path = os.path.join(ASSETS_DIR, "play_icons.png")
         if os.path.isfile(icons_path):
             ic = Image.open(icons_path).resize((ICONS_W, ICONS_H)).convert("RGBA")
@@ -331,39 +141,16 @@ async def get_thumb_new(videoid: str, player_username: str) -> str:
             black_ic = Image.merge("RGBA", (r.point(lambda *_: 0), g.point(lambda *_: 0), b.point(lambda *_: 0), a))
             bg.paste(black_ic, (ICONS_X, ICONS_Y), black_ic)
 
-        try:
-            os.remove(thumb_path)
-        except OSError:
-            pass
-
         final_img = bg.convert("RGB")
         final_img.save(cache_path)
         return cache_path
 
     except Exception as e:
         return get_random_fallback_img()
-
-
-# ==========================================
-# 🚀 MAIN ROUTER (Automatically decides logic)
-# ==========================================
-async def get_thumb(videoid: str, player_username: str = None) -> str:
-    """
-    Ye function decide karega kaunsa thumbnail banana hai.
-    Main bot -> Naya Thumbnail
-    Clone bot -> Purana Thumbnail
-    """
-    # Main bot ka actual username nikal rahe hain
-    main_bot_username = getattr(app, "username", "MusicBot")
-    
-    # Jo bot request bhej raha hai uska username
-    current_username = player_username if player_username else main_bot_username
-    
-    # Logic: Agar request bhejnewala Clone hai, toh old thumbnail return karo
-    if current_username != main_bot_username:
-        return await get_thumb_old(videoid, current_username)
-        
-    # Agar request bhejnewala Main bot hai, toh new thumbnail return karo
-    else:
-        return await get_thumb_new(videoid, current_username)
-
+    finally:
+        # 🔥 FIX: Yeh ensure karega ki temp file hamesha delete ho jaye
+        if os.path.exists(thumb_path):
+            try:
+                os.remove(thumb_path)
+            except OSError:
+                pass
