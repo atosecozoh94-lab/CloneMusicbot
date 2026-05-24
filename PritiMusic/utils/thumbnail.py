@@ -30,7 +30,7 @@ def get_random_fallback_img():
 def get_font(size: int, bold: bool = False):
     """Load project font safely; fallback to PIL default font."""
     font_candidates = [
-        os.path.join(ASSETS_DIR, "font2.ttf" if bold else "font.ttf"),
+        os.path.join(ASSETS_DIR, "font2.ttf" if bld else "font.ttf"),
         os.path.join(ASSETS_DIR, "Roboto-Bold.ttf" if bold else "Roboto-Regular.ttf"),
         "arial.ttf",
     ]
