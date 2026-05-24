@@ -67,7 +67,6 @@ lyrical = {}
 votemode = {}
 autoclean = []
 confirmer = {}
-
 START_IMG_URL = getenv("START_IMG_URL", "https://graph.org/file/00e998a79b57a22c3a5df-237ef60d9c4f2b942c.jpg
 https://graph.org/file/a47a0cc6c5023dceacbd5-c0157bb8fdef9b14b5.jpg
 https://graph.org/file/f464ff7c9a134295011ff-f58e0c87cd8bf16b25.jpg
