@@ -3,20 +3,23 @@ import re
 import random
 import aiofiles
 import aiohttp
+import time
+
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
-from unidecode import unidecode
 from py_yt import VideosSearch
 
+# ✅ Bot imports
 from PritiMusic import app
 from config import YOUTUBE_IMG_URL
-from PritiMusic.utils.database import clonebotdb 
 
 CACHE_DIR = "cache"
 ASSETS_DIR = "PritiMusic/assets"
-
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-# ✅ Helper for Random Fallback Image
+
+# ==========================================
+# COMMON HELPERS
+# ==========================================
 def get_random_fallback_img():
     if YOUTUBE_IMG_URL:
         if isinstance(YOUTUBE_IMG_URL, list):
@@ -24,7 +27,10 @@ def get_random_fallback_img():
         return YOUTUBE_IMG_URL
     return "https://telegra.ph/file/2e3d368e77c449c287430.jpg"
 
-# --- HELPER FUNCTIONS FOR UI ---
+
+# ==========================================
+# 🟢 OLD THUMBNAIL LOGIC (STRICTLY FOR CLONE BOTS)
+# ==========================================
 def get_font(size: int, bold: bool = False):
     font_candidates = [
         os.path.join(ASSETS_DIR, "font2.ttf" if bold else "font.ttf"),
@@ -45,7 +51,7 @@ def text_width(font, text: str) -> int:
         bbox = font.getbbox(text)
         return bbox[2] - bbox[0]
 
-def trim_to_width(text: str, font, max_width: int) -> str:
+def trim_to_width_old(text: str, font, max_width: int) -> str:
     text = str(text or "").strip()
     if not text:
         return "Unknown Title"
@@ -81,13 +87,8 @@ def wrap_text_lines(text: str, font, max_width: int, max_lines: int = 2):
     if len(lines) > max_lines:
         lines = lines[:max_lines]
     if len(lines) == max_lines:
-        lines[-1] = trim_to_width(lines[-1], font, max_width)
+        lines[-1] = trim_to_width_old(lines[-1], font, max_width)
     return lines[:max_lines]
-
-def make_progress_time(duration: str):
-    if not duration or ":" not in str(duration):
-        return "00:00", "03:00"
-    return "00:00", str(duration)
 
 async def download_image(url: str, dest: str) -> bool:
     try:
@@ -141,8 +142,6 @@ async def download_exact_video_thumbnail(videoid: str, raw_path: str) -> bool:
         f"https://i.ytimg.com/vi/{videoid}/maxresdefault.jpg",
         f"https://i.ytimg.com/vi/{videoid}/sddefault.jpg",
         f"https://i.ytimg.com/vi/{videoid}/hqdefault.jpg",
-        f"https://i.ytimg.com/vi/{videoid}/mqdefault.jpg",
-        f"https://i.ytimg.com/vi/{videoid}/default.jpg",
     ]
     for thumb_url in thumb_candidates:
         ok = await download_image(thumb_url, raw_path)
@@ -154,49 +153,21 @@ async def download_exact_video_thumbnail(videoid: str, raw_path: str) -> bool:
                 return True
     return False
 
-# ✅ MAIN FUNCTION (Clone Owner Database Logic Included)
-async def get_thumb(videoid, user_id, client):
-    # --- 1. Bot Name Fetch ---
+async def get_thumb_old(videoid: str, player_username: str) -> str:
+    cache_path = os.path.join(CACHE_DIR, f"{videoid}_{player_username}_old.png")
+    # Agar pehle se bana hua hai, toh direct return karo (No double load)
+    if os.path.isfile(cache_path):
+        return cache_path
+
+    # 🔥 FIX: Unique temp file name banaya taaki conflict na ho
+    unique_id = f"{videoid}_{int(time.time())}_{random.randint(100, 999)}"
+    raw_path = os.path.join(CACHE_DIR, f"raw_{unique_id}.jpg")
+    
     try:
-        me = await client.get_me()
-        bot_name = me.first_name.upper()
-        bot_id = me.id
-    except:
-        bot_name = "MUSIC BOT"
-        bot_id = 0
-
-    # --- 2. Clone Owner Name Fetch ---
-    owner_name = "OWNER" 
-    try:
-        # Check if the current bot is a clone in the database
-        bot_data = await clonebotdb.find_one({"bot_id": bot_id})
-        
-        if bot_data:
-            # Extract the ID of the user who created this clone
-            clone_owner_id = bot_data.get("user_id") 
-            try:
-                owner_obj = await client.get_users(clone_owner_id)
-                owner_name = owner_obj.first_name.upper()
-            except:
-                owner_name = "CLONE OWNER"
-        else:
-            owner_name = "MAIN BOT"
-    except Exception as e:
-        owner_name = "OWNER"
-
-    # --- 3. Cache Check ---
-    filename = os.path.join(CACHE_DIR, f"{videoid}_{bot_id}.png")
-    if os.path.isfile(filename):
-        return filename
-
-    try:
-        raw_path = os.path.join(CACHE_DIR, f"raw_{videoid}_{bot_id}.jpg")
-
         title, artist, duration, views = await fetch_video_details(videoid)
         downloaded = await download_exact_video_thumbnail(videoid, raw_path)
 
         W, H = 1280, 720
-
         if downloaded and os.path.exists(raw_path):
             try:
                 source = Image.open(raw_path).convert("RGBA")
@@ -205,144 +176,204 @@ async def get_thumb(videoid, user_id, client):
         else:
             source = create_fallback_cover()
 
-        # Background Blur & Contrast
         bg = source.resize((W, H), Image.LANCZOS)
         bg = bg.filter(ImageFilter.GaussianBlur(radius=45))
         bg = ImageEnhance.Brightness(bg).enhance(0.32)
         bg = ImageEnhance.Contrast(bg).enhance(1.08)
 
-        # Dark overlay
         dark = Image.new("RGBA", (W, H), (10, 12, 20, 110))
         bg = Image.alpha_composite(bg, dark)
 
-        # Glow effect
         glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         gdraw = ImageDraw.Draw(glow)
         gdraw.ellipse((40, 60, 420, 430), fill=(70, 110, 255, 55))
         gdraw.ellipse((900, 70, 1260, 430), fill=(255, 80, 150, 45))
-        gdraw.ellipse((780, 400, 1180, 760), fill=(255, 180, 40, 35))
         glow = glow.filter(ImageFilter.GaussianBlur(75))
         bg = Image.alpha_composite(bg, glow)
 
-        # Fonts
+        draw = ImageDraw.Draw(bg)
         title_font = get_font(48, bold=True)
         artist_font = get_font(28, bold=False)
         meta_font = get_font(24, bold=False)
-        time_font = get_font(22, bold=True)
         badge_font = get_font(22, bold=True)
-        footer_font = get_font(20, bold=False)
-        top_font = get_font(30, bold=True)
-
-        draw = ImageDraw.Draw(bg)
-
-        # --- Top Left (Clone Owner Name) & Top Right (Bot Name) ---
-        draw.text((35, 25), f"OWNER: {owner_name}", fill=(0, 255, 255, 255), font=top_font, stroke_width=2, stroke_fill="black")
-        bot_w = text_width(top_font, bot_name)
-        draw.text((W - bot_w - 35, 25), bot_name, fill=(255, 255, 0, 255), font=top_font, stroke_width=2, stroke_fill="black")
-
-        # Album art (Rounded)
+        
         cover_w, cover_h = 470, 470
         cover_x, cover_y = 90, (H - cover_h) // 2
-
         album = source.resize((cover_w, cover_h), Image.LANCZOS)
         mask = Image.new("L", (cover_w, cover_h), 0)
         ImageDraw.Draw(mask).rounded_rectangle((0, 0, cover_w, cover_h), radius=38, fill=255)
-
-        shadow = Image.new("RGBA", (cover_w + 40, cover_h + 40), (0, 0, 0, 0))
-        sdraw = ImageDraw.Draw(shadow)
-        sdraw.rounded_rectangle((20, 20, cover_w + 20, cover_h + 20), radius=42, fill=(0, 0, 0, 165))
-        shadow = shadow.filter(ImageFilter.GaussianBlur(18))
-        bg.paste(shadow, (cover_x - 20, cover_y - 20), shadow)
-
         bg.paste(album, (cover_x, cover_y), mask)
 
-        border = Image.new("RGBA", (cover_w, cover_h), (0, 0, 0, 0))
-        bdraw = ImageDraw.Draw(border)
-        bdraw.rounded_rectangle((0, 0, cover_w - 1, cover_h - 1), radius=38, outline=(255, 255, 255, 235), width=6)
-        bg.paste(border, (cover_x, cover_y), border)
-
-        # Right Translucent Panel
-        panel_x1 = 620
-        panel_y1 = cover_y
-        panel_x2 = W - 60
-        panel_y2 = cover_y + cover_h
-
+        panel_x1, panel_y1, panel_x2, panel_y2 = 620, cover_y, W - 60, cover_y + cover_h
         panel = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        pdraw = ImageDraw.Draw(panel)
-        pdraw.rounded_rectangle((panel_x1, panel_y1, panel_x2, panel_y2), radius=34, fill=(255, 255, 255, 22), outline=(255, 255, 255, 32), width=2)
+        ImageDraw.Draw(panel).rounded_rectangle((panel_x1, panel_y1, panel_x2, panel_y2), radius=34, fill=(255, 255, 255, 22))
         bg = Image.alpha_composite(bg, panel)
         draw = ImageDraw.Draw(bg)
 
-        # Badge
-        badge_text = f"Now Playing • {bot_name}"
-        badge_w = text_width(badge_font, badge_text) + 36
-        badge_h = 42
-        badge_x = panel_x1 + 36
-        badge_y = panel_y1 + 28
+        badge_text = f"Now Playing • @{player_username}"
+        draw.text((panel_x1 + 36 + 18, panel_y1 + 28 + 9), badge_text, font=badge_font, fill=(255, 255, 255, 240))
 
-        draw.rounded_rectangle((badge_x, badge_y, badge_x + badge_w, badge_y + badge_h), radius=18, fill=(90, 120, 255, 85))
-        draw.text((badge_x + 18, badge_y + 9), badge_text, font=badge_font, fill=(255, 255, 255, 240))
-
-        # Title Text Wrap
-        title_max_width = panel_x2 - panel_x1 - 72
-        title_lines = wrap_text_lines(title, title_font, title_max_width, max_lines=2)
-
-        title_y = panel_y1 + 95
+        title_lines = wrap_text_lines(title, title_font, panel_x2 - panel_x1 - 72, max_lines=2)
         for idx, line in enumerate(title_lines):
-            draw.text((panel_x1 + 36, title_y + (idx * 58)), line, font=title_font, fill=(255, 255, 255, 255))
+            draw.text((panel_x1 + 36, panel_y1 + 95 + (idx * 58)), line, font=title_font, fill=(255, 255, 255, 255))
+        
+        draw.text((panel_x1 + 36, panel_y1 + 225), f"By {artist}", font=artist_font, fill=(210, 215, 225, 235))
+        draw.text((panel_x1 + 36, panel_y1 + 270), f"Views • {views}", font=meta_font, fill=(170, 180, 195, 235))
 
-        # Artist Info
-        artist_text = trim_to_width(f"By {artist}", artist_font, title_max_width)
-        draw.text((panel_x1 + 36, panel_y1 + 225), artist_text, font=artist_font, fill=(210, 215, 225, 235))
-
-        # Views Info
-        views_text = trim_to_width(f"Views • {views}", meta_font, title_max_width)
-        draw.text((panel_x1 + 36, panel_y1 + 270), views_text, font=meta_font, fill=(170, 180, 195, 235))
-
-        # Progress bar
-        current_time, total_time = make_progress_time(duration)
-        bar_x = panel_x1 + 36
-        bar_y = panel_y1 + 360
-        bar_w = panel_x2 - panel_x1 - 72
-        bar_h = 12
-        progress = 0.40
-
-        draw.rounded_rectangle((bar_x, bar_y, bar_x + bar_w, bar_y + bar_h), radius=12, fill=(255, 255, 255, 70))
-        fill_w = int(bar_w * progress)
-        draw.rounded_rectangle((bar_x, bar_y, bar_x + fill_w, bar_y + bar_h), radius=12, fill=(0, 200, 255, 255))
-
-        knob = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        kdraw = ImageDraw.Draw(knob)
-        knob_x = bar_x + fill_w
-        knob_y = bar_y + bar_h // 2
-
-        kdraw.ellipse((knob_x - 16, knob_y - 16, knob_x + 16, knob_y + 16), fill=(255, 255, 255, 255))
-        knob = knob.filter(ImageFilter.GaussianBlur(1))
-        bg = Image.alpha_composite(bg, knob)
-        draw = ImageDraw.Draw(bg)
-
-        draw.text((bar_x, bar_y + 28), current_time, font=time_font, fill=(240, 240, 245, 235))
-        total_bbox = draw.textbbox((0, 0), total_time, font=time_font)
-        total_w = total_bbox[2] - total_bbox[0]
-        draw.text((bar_x + bar_w - total_w, bar_y + 28), total_time, font=time_font, fill=(240, 240, 245, 235))
-
-        # Footer
-        footer_text = "High Quality Streaming Experience"
-        draw.text((panel_x1 + 36, panel_y2 - 42), footer_text, font=footer_font, fill=(160, 175, 190, 220))
-
-        # Save Final Image
         final_img = bg.convert("RGB")
-        final_img.save(filename, quality=95)
-
-        # Cleanup raw image to save disk space
-        try:
-            if os.path.exists(raw_path):
+        final_img.save(cache_path, quality=95)
+        return cache_path
+    except Exception:
+        return get_random_fallback_img()
+    finally:
+        # 🔥 FIX: Hamesha temp file delete karega taaki storage full na ho
+        if os.path.exists(raw_path):
+            try:
                 os.remove(raw_path)
-        except Exception:
-            pass
+            except:
+                pass
 
-        return filename
+
+# ==========================================
+# 🔴 NEW THUMBNAIL LOGIC (STRICTLY FOR MAIN BOT)
+# ==========================================
+PANEL_W, PANEL_H = 763, 545
+PANEL_X = (1280 - PANEL_W) // 2
+PANEL_Y = 88
+TRANSPARENCY = 170
+INNER_OFFSET = 36
+THUMB_W, THUMB_H = 542, 273
+THUMB_X = PANEL_X + (PANEL_W - THUMB_W) // 2
+THUMB_Y = PANEL_Y + INNER_OFFSET
+TITLE_X = 377
+META_X = 377
+TITLE_Y = THUMB_Y + THUMB_H + 10
+META_Y = TITLE_Y + 45
+BAR_X, BAR_Y = 388, META_Y + 45
+BAR_RED_LEN = 280
+BAR_TOTAL_LEN = 480
+ICONS_W, ICONS_H = 415, 45
+ICONS_X = PANEL_X + (PANEL_W - ICONS_W) // 2
+ICONS_Y = BAR_Y + 48
+MAX_TITLE_WIDTH = 580
+
+def trim_to_width_new(text: str, font, max_w: int) -> str:
+    ellipsis = "…"
+    if font.getlength(text) <= max_w:
+        return text
+    for i in range(len(text) - 1, 0, -1):
+        if font.getlength(text[:i] + ellipsis) <= max_w:
+            return text[:i] + ellipsis
+    return ellipsis
+
+async def get_thumb_new(videoid: str, player_username: str) -> str:
+    cache_path = os.path.join(CACHE_DIR, f"{videoid}_{player_username}_new.png")
+    # Agar pehle se bana hua hai, toh direct return karo
+    if os.path.exists(cache_path):
+        return cache_path
+
+    # 🔥 FIX: Unique temp file naam taaki clone aur main aapas me file overwrite na karein
+    unique_id = f"{videoid}_{int(time.time())}_{random.randint(100, 999)}"
+    thumb_path = os.path.join(CACHE_DIR, f"raw_new_{unique_id}.png")
+
+    try:
+        results = VideosSearch(f"https://www.youtube.com/watch?v={videoid}", limit=1)
+        try:
+            results_data = await results.next()
+            data = results_data.get("result", [])[0]
+            title = re.sub(r"\W+", " ", data.get("title", "Unsupported Title")).title()
+            thumbnail = data.get("thumbnails", [{}])[0].get("url") or get_random_fallback_img()
+            duration = data.get("duration")
+            views = data.get("viewCount", {}).get("short", "Unknown Views")
+        except Exception:
+            title, thumbnail, duration, views = "Unsupported Title", get_random_fallback_img(), None, "Unknown Views"
+
+        is_live = not duration or str(duration).strip().lower() in {"", "live", "live now"}
+        duration_text = "Live" if is_live else duration or "Unknown Mins"
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(thumbnail) as resp:
+                    if resp.status == 200:
+                        async with aiofiles.open(thumb_path, "wb") as f:
+                            await f.write(await resp.read())
+        except Exception:
+            return get_random_fallback_img()
+
+        base = Image.open(thumb_path).resize((1280, 720)).convert("RGBA")
+        bg = ImageEnhance.Brightness(base.filter(ImageFilter.BoxBlur(10))).enhance(0.6)
+
+        panel_area = bg.crop((PANEL_X, PANEL_Y, PANEL_X + PANEL_W, PANEL_Y + PANEL_H))
+        overlay = Image.new("RGBA", (PANEL_W, PANEL_H), (255, 255, 255, TRANSPARENCY))
+        frosted = Image.alpha_composite(panel_area, overlay)
+        mask = Image.new("L", (PANEL_W, PANEL_H), 0)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, PANEL_W, PANEL_H), 50, fill=255)
+        bg.paste(frosted, (PANEL_X, PANEL_Y), mask)
+
+        draw = ImageDraw.Draw(bg)
+        try:
+            title_font = ImageFont.truetype(os.path.join(ASSETS_DIR, "font2.ttf"), 32)
+            regular_font = ImageFont.truetype(os.path.join(ASSETS_DIR, "font.ttf"), 18)
+        except OSError:
+            title_font = regular_font = ImageFont.load_default()
+
+        thumb = base.resize((THUMB_W, THUMB_H))
+        tmask = Image.new("L", thumb.size, 0)
+        ImageDraw.Draw(tmask).rounded_rectangle((0, 0, THUMB_W, THUMB_H), 20, fill=255)
+        bg.paste(thumb, (THUMB_X, THUMB_Y), tmask)
+
+        draw.text((TITLE_X, TITLE_Y), trim_to_width_new(title, title_font, MAX_TITLE_WIDTH), fill="black", font=title_font)
+        draw.text((META_X, META_Y), f"YouTube | {views}", fill="black", font=regular_font)
+
+        draw.line([(BAR_X, BAR_Y), (BAR_X + BAR_RED_LEN, BAR_Y)], fill="red", width=6)
+        draw.line([(BAR_X + BAR_RED_LEN, BAR_Y), (BAR_X + BAR_TOTAL_LEN, BAR_Y)], fill="gray", width=5)
+        draw.ellipse([(BAR_X + BAR_RED_LEN - 7, BAR_Y - 7), (BAR_X + BAR_RED_LEN + 7, BAR_Y + 7)], fill="red")
+
+        draw.text((BAR_X, BAR_Y + 15), "00:00", fill="black", font=regular_font)
+        end_text = "Live" if is_live else duration_text
+        draw.text((BAR_X + BAR_TOTAL_LEN - (90 if is_live else 60), BAR_Y + 15), end_text, fill="red" if is_live else "black", font=regular_font)
+
+        icons_path = os.path.join(ASSETS_DIR, "play_icons.png")
+        if os.path.isfile(icons_path):
+            ic = Image.open(icons_path).resize((ICONS_W, ICONS_H)).convert("RGBA")
+            r, g, b, a = ic.split()
+            black_ic = Image.merge("RGBA", (r.point(lambda *_: 0), g.point(lambda *_: 0), b.point(lambda *_: 0), a))
+            bg.paste(black_ic, (ICONS_X, ICONS_Y), black_ic)
+
+        final_img = bg.convert("RGB")
+        final_img.save(cache_path)
+        return cache_path
 
     except Exception as e:
-        print(f"Thumbnail Generation Error: {e}")
         return get_random_fallback_img()
+    finally:
+        # 🔥 FIX: Temp image file ko safely clean up karna
+        if os.path.exists(thumb_path):
+            try:
+                os.remove(thumb_path)
+            except OSError:
+                pass
+
+
+# ==========================================
+# 🚀 MAIN ROUTER (Automatically decides logic)
+# ==========================================
+async def get_thumb(videoid: str, player_username: str = None) -> str:
+    """
+    Ye function decide karega kaunsa thumbnail banana hai.
+    Main bot -> Naya Thumbnail
+    Clone bot -> Purana Thumbnail
+    """
+    # Main bot ka actual username nikal rahe hain
+    main_bot_username = getattr(app, "username", "MusicBot")
+    
+    # Jo bot request bhej raha hai uska username
+    current_username = player_username if player_username else main_bot_username
+    
+    # Logic: Agar request bhejnewala Clone hai, toh old thumbnail return karo
+    if current_username != main_bot_username:
+        return await get_thumb_old(videoid, current_username)
+        
+    # Agar request bhejnewala Main bot hai, toh new thumbnail return karo
+    else:
+        return await get_thumb_new(videoid, current_username)
