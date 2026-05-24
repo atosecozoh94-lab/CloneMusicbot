@@ -1,57 +1,56 @@
+# -----------------------------------------------
+# 🔸 StrangerMusic Project
+# 🔹 Developed & Maintained by: Shashank Shukla (https://github.com/itzshukla)
+# 📅 Copyright © 2022 – All Rights Reserved
+#
+# 📖 License:
+# This source code is open for educational and non-commercial use ONLY.
+# You are required to retain this credit in all copies or substantial portions of this file.
+# Commercial use, redistribution, or removal of this notice is strictly prohibited
+# without prior written permission from the author.
+#
+# ❤️ Made with dedication and love by ItzShukla
+# -----------------------------------------------
 import os
 import re
-import random
 import time
+import random
 import aiofiles
 import aiohttp
-
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 from py_yt import VideosSearch
-
-# ✅ Bot imports
-from PritiMusic import app
 from config import YOUTUBE_IMG_URL
 
+# Constants
 CACHE_DIR = "cache"
-ASSETS_DIR = "PritiMusic/assets"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-
-# ==========================================
-# COMMON HELPERS
-# ==========================================
-def get_random_fallback_img():
-    if YOUTUBE_IMG_URL:
-        if isinstance(YOUTUBE_IMG_URL, list):
-            return random.choice(YOUTUBE_IMG_URL)
-        return YOUTUBE_IMG_URL
-    return "https://telegra.ph/file/2e3d368e77c449c287430.jpg"
-
-
-# ==========================================
-# 🟢 THUMBNAIL LOGIC (ADAPTED FOR CLONES)
-# ==========================================
 PANEL_W, PANEL_H = 763, 545
 PANEL_X = (1280 - PANEL_W) // 2
 PANEL_Y = 88
 TRANSPARENCY = 170
 INNER_OFFSET = 36
+
 THUMB_W, THUMB_H = 542, 273
 THUMB_X = PANEL_X + (PANEL_W - THUMB_W) // 2
 THUMB_Y = PANEL_Y + INNER_OFFSET
+
 TITLE_X = 377
 META_X = 377
 TITLE_Y = THUMB_Y + THUMB_H + 10
 META_Y = TITLE_Y + 45
+
 BAR_X, BAR_Y = 388, META_Y + 45
 BAR_RED_LEN = 280
 BAR_TOTAL_LEN = 480
+
 ICONS_W, ICONS_H = 415, 45
 ICONS_X = PANEL_X + (PANEL_W - ICONS_W) // 2
 ICONS_Y = BAR_Y + 48
+
 MAX_TITLE_WIDTH = 580
 
-def trim_to_width(text: str, font, max_w: int) -> str:
+def trim_to_width(text: str, font: ImageFont.FreeTypeFont, max_w: int) -> str:
     ellipsis = "…"
     if font.getlength(text) <= max_w:
         return text
@@ -60,48 +59,54 @@ def trim_to_width(text: str, font, max_w: int) -> str:
             return text[:i] + ellipsis
     return ellipsis
 
-async def get_thumb(videoid: str, player_username: str = "clone") -> str:
-    # 🔥 FIX FOR CLONES: Use bot's username in cache path so multiple clones don't overwrite each other's thumbnails
-    safe_username = player_username if player_username else "clone"
-    cache_path = os.path.join(CACHE_DIR, f"{videoid}_{safe_username}_new.png")
+# 🔥 FIX: *args, **kwargs lagaya taaki 3 arguments aaye toh bhi error na aaye
+async def get_thumb(videoid: str, *args, **kwargs) -> str:
+    # Clone bot ko alag rakhne ke liye args se bot_id nikalne ka try karte hain
+    cache_prefix = str(args[0]) if args else "main"
     
-    # Agar thumbnail pehle se bana hua hai, toh seedha yahi se return karo
+    # Final thumbnail path
+    cache_path = os.path.join(CACHE_DIR, f"{videoid}_{cache_prefix}_v4.png")
     if os.path.exists(cache_path):
         return cache_path
 
-    # 🔥 FIX: Unique temp file naam taaki download corrupt na ho
-    unique_id = f"{videoid}_{int(time.time())}_{random.randint(100, 999)}"
-    thumb_path = os.path.join(CACHE_DIR, f"raw_{safe_username}_{unique_id}.png")
+    # 🔥 FIX for 2 thumbnails at once: Unique temp path
+    unique_id = f"{int(time.time())}_{random.randint(100, 999)}"
+    thumb_path = os.path.join(CACHE_DIR, f"raw_{cache_prefix}_{videoid}_{unique_id}.png")
+
+    # YouTube video data fetch
+    results = VideosSearch(f"https://www.youtube.com/watch?v={videoid}", limit=1)
+    try:
+        results_data = await results.next()
+        result_items = results_data.get("result", [])
+        if not result_items:
+            raise ValueError("No results found.")
+        data = result_items[0]
+        title = re.sub(r"\W+", " ", data.get("title", "Unsupported Title")).title()
+        thumbnail = data.get("thumbnails", [{}])[0].get("url", YOUTUBE_IMG_URL)
+        duration = data.get("duration")
+        views = data.get("viewCount", {}).get("short", "Unknown Views")
+    except Exception:
+        title, thumbnail, duration, views = "Unsupported Title", YOUTUBE_IMG_URL, None, "Unknown Views"
+
+    is_live = not duration or str(duration).strip().lower() in {"", "live", "live now"}
+    duration_text = "Live" if is_live else duration or "Unknown Mins"
+
+    # Download raw thumbnail
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(thumbnail) as resp:
+                if resp.status == 200:
+                    async with aiofiles.open(thumb_path, "wb") as f:
+                        await f.write(await resp.read())
+    except Exception:
+        return YOUTUBE_IMG_URL
 
     try:
-        results = VideosSearch(f"https://www.youtube.com/watch?v={videoid}", limit=1)
-        try:
-            results_data = await results.next()
-            data = results_data.get("result", [])[0]
-            title = re.sub(r"\W+", " ", data.get("title", "Unsupported Title")).title()
-            thumbnail = data.get("thumbnails", [{}])[0].get("url") or get_random_fallback_img()
-            duration = data.get("duration")
-            views = data.get("viewCount", {}).get("short", "Unknown Views")
-        except Exception:
-            title, thumbnail, duration, views = "Unsupported Title", get_random_fallback_img(), None, "Unknown Views"
-
-        is_live = not duration or str(duration).strip().lower() in {"", "live", "live now"}
-        duration_text = "Live" if is_live else duration or "Unknown Mins"
-
-        # Image download karna (safe tarike se)
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(thumbnail) as resp:
-                    if resp.status == 200:
-                        async with aiofiles.open(thumb_path, "wb") as f:
-                            await f.write(await resp.read())
-        except Exception:
-            return get_random_fallback_img()
-
-        # Image Processing (Blur, Brightness, Panel)
+        # Create base image
         base = Image.open(thumb_path).resize((1280, 720)).convert("RGBA")
         bg = ImageEnhance.Brightness(base.filter(ImageFilter.BoxBlur(10))).enhance(0.6)
 
+        # Frosted glass panel
         panel_area = bg.crop((PANEL_X, PANEL_Y, PANEL_X + PANEL_W, PANEL_Y + PANEL_H))
         overlay = Image.new("RGBA", (PANEL_W, PANEL_H), (255, 255, 255, TRANSPARENCY))
         frosted = Image.alpha_composite(panel_area, overlay)
@@ -109,10 +114,11 @@ async def get_thumb(videoid: str, player_username: str = "clone") -> str:
         ImageDraw.Draw(mask).rounded_rectangle((0, 0, PANEL_W, PANEL_H), 50, fill=255)
         bg.paste(frosted, (PANEL_X, PANEL_Y), mask)
 
+        # Draw details
         draw = ImageDraw.Draw(bg)
         try:
-            title_font = ImageFont.truetype(os.path.join(ASSETS_DIR, "font2.ttf"), 32)
-            regular_font = ImageFont.truetype(os.path.join(ASSETS_DIR, "font.ttf"), 18)
+            title_font = ImageFont.truetype("SHUKLAMUSIC/assets/assets/font2.ttf", 32)
+            regular_font = ImageFont.truetype("SHUKLAMUSIC/assets/assets/font.ttf", 18)
         except OSError:
             title_font = regular_font = ImageFont.load_default()
 
@@ -121,11 +127,10 @@ async def get_thumb(videoid: str, player_username: str = "clone") -> str:
         ImageDraw.Draw(tmask).rounded_rectangle((0, 0, THUMB_W, THUMB_H), 20, fill=255)
         bg.paste(thumb, (THUMB_X, THUMB_Y), tmask)
 
-        # Title aur Views likhna
         draw.text((TITLE_X, TITLE_Y), trim_to_width(title, title_font, MAX_TITLE_WIDTH), fill="black", font=title_font)
         draw.text((META_X, META_Y), f"YouTube | {views}", fill="black", font=regular_font)
 
-        # Progress bar draw karna
+        # Progress bar
         draw.line([(BAR_X, BAR_Y), (BAR_X + BAR_RED_LEN, BAR_Y)], fill="red", width=6)
         draw.line([(BAR_X + BAR_RED_LEN, BAR_Y), (BAR_X + BAR_TOTAL_LEN, BAR_Y)], fill="gray", width=5)
         draw.ellipse([(BAR_X + BAR_RED_LEN - 7, BAR_Y - 7), (BAR_X + BAR_RED_LEN + 7, BAR_Y + 7)], fill="red")
@@ -134,22 +139,20 @@ async def get_thumb(videoid: str, player_username: str = "clone") -> str:
         end_text = "Live" if is_live else duration_text
         draw.text((BAR_X + BAR_TOTAL_LEN - (90 if is_live else 60), BAR_Y + 15), end_text, fill="red" if is_live else "black", font=regular_font)
 
-        # Play icons lagana
-        icons_path = os.path.join(ASSETS_DIR, "play_icons.png")
+        # Icons
+        icons_path = "SHUKLAMUSIC/assets/assets/play_icons.png"
         if os.path.isfile(icons_path):
             ic = Image.open(icons_path).resize((ICONS_W, ICONS_H)).convert("RGBA")
             r, g, b, a = ic.split()
             black_ic = Image.merge("RGBA", (r.point(lambda *_: 0), g.point(lambda *_: 0), b.point(lambda *_: 0), a))
             bg.paste(black_ic, (ICONS_X, ICONS_Y), black_ic)
 
-        final_img = bg.convert("RGB")
-        final_img.save(cache_path)
+        # Final save
+        bg.save(cache_path)
         return cache_path
 
-    except Exception as e:
-        return get_random_fallback_img()
     finally:
-        # 🔥 FIX: Yeh ensure karega ki temp file hamesha delete ho jaye
+        # Cleanup: Raw image delete ho jayegi takki storage aur memory bache
         if os.path.exists(thumb_path):
             try:
                 os.remove(thumb_path)
