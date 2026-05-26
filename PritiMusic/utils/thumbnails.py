@@ -12,158 +12,158 @@ from config import YOUTUBE_IMG_URL
 CACHE_DIR = "cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-# Helper: Text ko wrap/trim karne ke liye aur uska width nikalne ke liye
-def get_text_width(font, text):
-    try:
-        return int(font.getlength(text))
-    except Exception:
-        return font.getbbox(text)[2] - font.getbbox(text)[0]
+PANEL_W, PANEL_H = 763, 545
+PANEL_X = (1280 - PANEL_W) // 2
+PANEL_Y = 88
+TRANSPARENCY = 170
+INNER_OFFSET = 36
 
-def trim_to_width(text: str, font, max_w: int) -> str:
+THUMB_W, THUMB_H = 542, 273
+THUMB_X = PANEL_X + (PANEL_W - THUMB_W) // 2
+THUMB_Y = PANEL_Y + INNER_OFFSET
+
+TITLE_X = 377
+META_X = 377
+TITLE_Y = THUMB_Y + THUMB_H + 10
+META_Y = TITLE_Y + 45
+
+BAR_X, BAR_Y = 388, META_Y + 45
+BAR_RED_LEN = 280
+BAR_TOTAL_LEN = 480
+
+ICONS_W, ICONS_H = 415, 45
+ICONS_X = PANEL_X + (PANEL_W - ICONS_W) // 2
+ICONS_Y = BAR_Y + 48
+
+MAX_TITLE_WIDTH = 580
+
+def trim_to_width(text: str, font: ImageFont.FreeTypeFont, max_w: int) -> str:
     ellipsis = "…"
-    if get_text_width(font, text) <= max_w:
-        return text
-    for i in range(len(text) - 1, 0, -1):
-        if get_text_width(font, text[:i] + ellipsis) <= max_w:
-            return text[:i] + ellipsis
+    try:
+        if font.getlength(text) <= max_w:
+            return text
+        for i in range(len(text) - 1, 0, -1):
+            if font.getlength(text[:i] + ellipsis) <= max_w:
+                return text[:i] + ellipsis
+    except Exception:
+        pass
     return ellipsis
 
-# Helper: Fonts safe loading
-def load_font(path: str, size: int):
-    try:
-        return ImageFont.truetype(path, size)
-    except OSError:
-        try:
-            return ImageFont.truetype("arial.ttf", size) # Fallback
-        except Exception:
-            return ImageFont.load_default()
-
-# 🟢 SPOTIFY EDITION THUMBNAIL LOGIC
 async def get_thumb(videoid: str, *args, **kwargs) -> str:
-    cache_prefix = str(args[0]) if args else kwargs.get("bot_username", "main_bot")
+    # Clone bot ko alag rakhne ke liye
+    cache_prefix = str(args[0]) if args else kwargs.get("bot_username", "main")
     
-    # Custom Thumbnail File Check
-    custom_thumb = kwargs.get("thumb_url") or kwargs.get("thumbnail")
-    
-    is_local_file = False
-    if custom_thumb and os.path.isfile(custom_thumb):
-        is_local_file = True
-        raw_image_path = custom_thumb 
-    else:
-        unique_id = f"{int(time.time())}_{random.randint(100, 999)}"
-        thumb_path = os.path.join(CACHE_DIR, f"raw_{cache_prefix}_{videoid}_{unique_id}.png")
-        raw_image_path = thumb_path 
-    
-    # Final cache output path (v6_spotify)
-    cache_path = os.path.join(CACHE_DIR, f"{videoid}_{cache_prefix}_v6_spotify.png")
+    cache_path = os.path.join(CACHE_DIR, f"{videoid}_{cache_prefix}_v4_fixed.png")
     if os.path.exists(cache_path):
         return cache_path
 
-    # Fetch Data from YouTube
+    # YouTube video data fetch karne ke liye (Gaane ka hi thumbnail chahiye)
     results = VideosSearch(f"https://www.youtube.com/watch?v={videoid}", limit=1)
     try:
         results_data = await results.next()
-        data = results_data.get("result", [])[0]
+        result_items = results_data.get("result", [])
+        if not result_items:
+            raise ValueError("No results found.")
+        data = result_items[0]
         title = re.sub(r"\W+", " ", data.get("title", "Unsupported Title")).title()
+        
+        # YouTube ka actual thumbnail nikal rahe hain
+        song_thumbnail = data.get("thumbnails", [{}])[0].get("url")
         duration = data.get("duration")
         views = data.get("viewCount", {}).get("short", "Unknown Views")
-        channel_name = data.get("channel", {}).get("name", "Unknown Artist")
-        youtube_thumb_url = data.get("thumbnails", [{}])[0].get("url", YOUTUBE_IMG_URL)
     except Exception:
-        title, duration, views, channel_name, youtube_thumb_url = "Unsupported Title", None, "Unknown Views", "Unknown Artist", YOUTUBE_IMG_URL
+        title, song_thumbnail, duration, views = "Unsupported Title", None, None, "Unknown Views"
 
     is_live = not duration or str(duration).strip().lower() in {"", "live", "live now"}
-    duration_text = "LIVE" if is_live else duration or "0:00"
+    duration_text = "Live" if is_live else duration or "Unknown Mins"
 
-    # Download ONLY if it's NOT a local file
+    # Agar YouTube ka thumbnail nahi mila toh Config ya Clone ke file par fallback karega
+    clone_custom_thumb = kwargs.get("thumbnail") or kwargs.get("thumb_url")
+    final_target = song_thumbnail if song_thumbnail else (clone_custom_thumb or YOUTUBE_IMG_URL)
+
+    # Clone Bot Local File Fix: Check if it's already a downloaded/local file
+    is_local_file = False
+    if final_target and os.path.isfile(str(final_target)):
+        is_local_file = True
+        raw_image_path = final_target
+    else:
+        unique_id = f"{int(time.time())}_{random.randint(100, 999)}"
+        raw_image_path = os.path.join(CACHE_DIR, f"raw_{cache_prefix}_{videoid}_{unique_id}.png")
+
+    # Sirf tab download karega jab wo local file na ho (Clone file error bachega)
     if not is_local_file:
-        download_url = custom_thumb if custom_thumb else youtube_thumb_url
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(download_url) as resp:
+                async with session.get(final_target) as resp:
                     if resp.status == 200:
                         async with aiofiles.open(raw_image_path, "wb") as f:
                             await f.write(await resp.read())
         except Exception:
-            pass
+            if not os.path.exists(raw_image_path):
+                return YOUTUBE_IMG_URL
 
-    # ---------------------------------------------------------
-    # 🎨 SPOTIFY UI DRAWING
-    # ---------------------------------------------------------
     try:
-        W, H = 1280, 720
+        # 🔥 Ulta-Fula FIX: .resize ki jagah ImageOps.fit use kiya gaya hai taaki frame me perfect aaye
         try:
             raw_img = Image.open(raw_image_path).convert("RGBA")
         except Exception:
-            raw_img = Image.new("RGBA", (500, 500), (40, 40, 40, 255))
+            raw_img = Image.new("RGBA", (1280, 720), (20, 20, 20, 255))
 
-        # 1. Background: Heavy Blur & Darken (Spotify Fullscreen Theme)
-        base = ImageOps.fit(raw_img, (W, H), Image.LANCZOS)
-        bg = base.filter(ImageFilter.GaussianBlur(60)) # Heavy blur
-        bg = ImageEnhance.Brightness(bg).enhance(0.25) # Dark tint
+        base = ImageOps.fit(raw_img, (1280, 720), Image.LANCZOS)
+        bg = ImageEnhance.Brightness(base.filter(ImageFilter.BoxBlur(10))).enhance(0.6)
 
+        # Frosted glass panel
+        panel_area = bg.crop((PANEL_X, PANEL_Y, PANEL_X + PANEL_W, PANEL_Y + PANEL_H))
+        overlay = Image.new("RGBA", (PANEL_W, PANEL_H), (255, 255, 255, TRANSPARENCY))
+        frosted = Image.alpha_composite(panel_area, overlay)
+        mask = Image.new("L", (PANEL_W, PANEL_H), 0)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, PANEL_W, PANEL_H), 50, fill=255)
+        bg.paste(frosted, (PANEL_X, PANEL_Y), mask)
+
+        # Draw details
         draw = ImageDraw.Draw(bg)
+        try:
+            title_font = ImageFont.truetype("SHUKLAMUSIC/assets/assets/font2.ttf", 32)
+            regular_font = ImageFont.truetype("SHUKLAMUSIC/assets/assets/font.ttf", 18)
+        except OSError:
+            try:
+                title_font = ImageFont.truetype("arial.ttf", 32)
+                regular_font = ImageFont.truetype("arial.ttf", 18)
+            except Exception:
+                title_font = regular_font = ImageFont.load_default()
 
-        # 2. Main Album Art (Big, Square, Center)
-        ALBUM_SIZE = 460
-        AX = (W - ALBUM_SIZE) // 2
-        AY = 50
+        # 🔥 Inner Thumbnail Fix (Bina dabaye set karega)
+        thumb = ImageOps.fit(raw_img, (THUMB_W, THUMB_H), Image.LANCZOS)
+        tmask = Image.new("L", thumb.size, 0)
+        ImageDraw.Draw(tmask).rounded_rectangle((0, 0, THUMB_W, THUMB_H), 20, fill=255)
+        bg.paste(thumb, (THUMB_X, THUMB_Y), tmask)
 
-        album_img = ImageOps.fit(raw_img, (ALBUM_SIZE, ALBUM_SIZE), Image.LANCZOS)
-        
-        # Spotify uses very slight rounded corners for album art
-        mask = Image.new("L", (ALBUM_SIZE, ALBUM_SIZE), 0)
-        ImageDraw.Draw(mask).rounded_rectangle((0, 0, ALBUM_SIZE, ALBUM_SIZE), radius=15, fill=255)
-        bg.paste(album_img, (AX, AY), mask)
+        draw.text((TITLE_X, TITLE_Y), trim_to_width(title, title_font, MAX_TITLE_WIDTH), fill="black", font=title_font)
+        draw.text((META_X, META_Y), f"YouTube | {views}", fill="black", font=regular_font)
 
-        # 3. Load Fonts
-        title_font = load_font("SHUKLAMUSIC/assets/assets/font2.ttf", 42) # Bold
-        artist_font = load_font("SHUKLAMUSIC/assets/assets/font.ttf", 26) # Regular
-        time_font = load_font("SHUKLAMUSIC/assets/assets/font.ttf", 18)   # Small
+        # Progress bar
+        draw.line([(BAR_X, BAR_Y), (BAR_X + BAR_RED_LEN, BAR_Y)], fill="red", width=6)
+        draw.line([(BAR_X + BAR_RED_LEN, BAR_Y), (BAR_X + BAR_TOTAL_LEN, BAR_Y)], fill="gray", width=5)
+        draw.ellipse([(BAR_X + BAR_RED_LEN - 7, BAR_Y - 7), (BAR_X + BAR_RED_LEN + 7, BAR_Y + 7)], fill="red")
 
-        # 4. Text: Left-aligned to the Album Art
-        TITLE_Y = AY + ALBUM_SIZE + 35
-        safe_title = trim_to_width(title, title_font, ALBUM_SIZE - 20)
-        
-        # Title (Pure White)
-        draw.text((AX, TITLE_Y), safe_title, fill=(255, 255, 255, 255), font=title_font)
+        draw.text((BAR_X, BAR_Y + 15), "00:00", fill="black", font=regular_font)
+        end_text = "Live" if is_live else duration_text
+        draw.text((BAR_X + BAR_TOTAL_LEN - (90 if is_live else 60), BAR_Y + 15), end_text, fill="red" if is_live else "black", font=regular_font)
 
-        # Artist (Spotify Gray: #B3B3B3)
-        ARTIST_Y = TITLE_Y + 55
-        draw.text((AX, ARTIST_Y), channel_name, fill=(179, 179, 179, 255), font=artist_font)
+        # Icons
+        icons_path = "SHUKLAMUSIC/assets/assets/play_icons.png"
+        if os.path.isfile(icons_path):
+            ic = Image.open(icons_path).resize((ICONS_W, ICONS_H)).convert("RGBA")
+            r, g, b, a = ic.split()
+            black_ic = Image.merge("RGBA", (r.point(lambda *_: 0), g.point(lambda *_: 0), b.point(lambda *_: 0), a))
+            bg.paste(black_ic, (ICONS_X, ICONS_Y), black_ic)
 
-        # 5. Progress Bar (Spotify Style)
-        BAR_Y = ARTIST_Y + 50
-        filled_ratio = 0.35 # Fixed at 35% visually
-        filled_len = int(ALBUM_SIZE * filled_ratio)
-        
-        # Empty Track (Dark Gray: #4D4D4D)
-        draw.line([(AX, BAR_Y), (AX + ALBUM_SIZE, BAR_Y)], fill=(77, 77, 77, 255), width=5)
-        
-        # Filled Track (Pure White)
-        draw.line([(AX, BAR_Y), (AX + filled_len, BAR_Y)], fill=(255, 255, 255, 255), width=5)
-        
-        # Playhead Dot (Pure White)
-        draw.ellipse([(AX + filled_len - 7, BAR_Y - 7), (AX + filled_len + 7, BAR_Y + 7)], fill=(255, 255, 255, 255))
-
-        # 6. Timers (Below the bar, small font)
-        TIME_Y = BAR_Y + 15
-        
-        # Current Time (0:00)
-        draw.text((AX, TIME_Y), "0:00", fill=(179, 179, 179, 255), font=time_font)
-        
-        # Total Duration / Live Tag
-        dur_w = get_text_width(time_font, duration_text)
-        # Agar LIVE hai to Spotify Green color dena (#1DB954)
-        dur_color = (29, 185, 84, 255) if is_live else (179, 179, 179, 255)
-        draw.text((AX + ALBUM_SIZE - dur_w, TIME_Y), duration_text, fill=dur_color, font=time_font)
-
-        # Save and return
-        bg.convert("RGB").save(cache_path, quality=95)
+        # Final save
+        bg.save(cache_path)
         return cache_path
 
     finally:
-        # File Cleanup (Local clone files are safe)
+        # Cleanup: Raw image delete hogi, lekin agar Clone ki Local file thi toh usko delete nahi karega
         if not is_local_file and os.path.exists(raw_image_path):
             try:
                 os.remove(raw_image_path)
