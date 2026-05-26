@@ -1,12 +1,11 @@
-import os
+Import os
 import re
 import random
 import time
 import aiofiles
 import aiohttp
 
-# ✅ ImageOps add kiya gaya hai "ulta-fula" image stretch ko theek karne ke liye
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 from py_yt import VideosSearch
 
 # ✅ Bot imports
@@ -113,7 +112,8 @@ async def get_thumb(videoid: str, *args, **kwargs) -> str:
     if os.path.exists(cache_path):
         return cache_path
 
-    thumb_path = "" # Defined beforehand so finally block doesn't throw error
+    unique_id = f"{videoid}_{int(time.time())}_{random.randint(100, 999)}"
+    thumb_path = os.path.join(CACHE_DIR, f"raw_premium_{unique_id}.png")
 
     try:
         # Fetch Data
@@ -129,16 +129,8 @@ async def get_thumb(videoid: str, *args, **kwargs) -> str:
         except Exception:
             title, artist, thumbnail, duration, views = "Unsupported Title", "Unknown Artist", get_random_fallback_img(), None, "Unknown Views"
 
-        # 🛑 FIX: Agar bot Main Bot nahi hai, toh sidha original thumbnail ka URL bhej do (Design mat banao)
-        if current_username != main_bot_username:
-            return thumbnail
-
         is_live = not duration or str(duration).strip().lower() in {"", "live", "live now"}
         duration_text = "Live" if is_live else duration or "Unknown Mins"
-
-        # unique id & path only generated if it's the main bot
-        unique_id = f"{videoid}_{int(time.time())}_{random.randint(100, 999)}"
-        thumb_path = os.path.join(CACHE_DIR, f"raw_premium_{unique_id}.png")
 
         # Download raw thumbnail
         await download_image(thumbnail, thumb_path)
@@ -149,12 +141,9 @@ async def get_thumb(videoid: str, *args, **kwargs) -> str:
         W, H = 1280, 720
         
         try:
-            raw_img = Image.open(thumb_path).convert("RGBA")
-            # 🛑 FIX 1: Background ke liye fit use kiya
-            base = ImageOps.fit(raw_img, (W, H), Image.LANCZOS)
+            base = Image.open(thumb_path).resize((W, H)).convert("RGBA")
         except Exception:
-            raw_img = Image.new("RGBA", (W, H), (20, 20, 30, 255))
-            base = raw_img
+            base = Image.new("RGBA", (W, H), (20, 20, 30, 255))
 
         # 1. Background Blur & Dark Gradient Overlay
         bg = base.filter(ImageFilter.GaussianBlur(40))
@@ -185,12 +174,7 @@ async def get_thumb(videoid: str, *args, **kwargs) -> str:
         bg = Image.alpha_composite(bg, shadow)
         
         # Image Masking & Border
-        # 🛑 FIX 2: "Ulta-Fula" theek karne ke liye ImageOps.fit use kiya
-        try:
-            album = ImageOps.fit(raw_img, (album_size, album_size), Image.LANCZOS)
-        except Exception:
-            album = base.resize((album_size, album_size), Image.LANCZOS)
-            
+        album = base.resize((album_size, album_size), Image.LANCZOS)
         mask = Image.new("L", (album_size, album_size), 0)
         ImageDraw.Draw(mask).rounded_rectangle((0, 0, album_size, album_size), radius=35, fill=255)
         
@@ -272,8 +256,11 @@ async def get_thumb(videoid: str, *args, **kwargs) -> str:
         return get_random_fallback_img()
     finally:
         # Cleanup Raw Image safely
-        if thumb_path and os.path.exists(thumb_path):
+        if os.path.exists(thumb_path):
             try:
                 os.remove(thumb_path)
             except OSError:
                 pass
+
+
+Isa code ko fix karo ulta fula thumbnail aa rha ha or clones wale bot me bhi wahi thumbnail dowald karke Bejh rha ha jo galat h kyuki main clone bot ka thumbnail alag rakha h
