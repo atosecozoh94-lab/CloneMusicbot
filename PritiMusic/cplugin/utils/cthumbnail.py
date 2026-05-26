@@ -12,7 +12,7 @@ from config import YOUTUBE_IMG_URL
 CACHE_DIR = "cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-# Helper: Text ko wrap/trim karne ke liye aur uska width nikalne ke liye
+# Helper: Text ki exact width nikalne ke liye
 def get_text_width(font, text):
     try:
         return int(font.getlength(text))
@@ -28,172 +28,156 @@ def trim_to_width(text: str, font, max_w: int) -> str:
             return text[:i] + ellipsis
     return ellipsis
 
-# Helper: Fonts safe loading
-def load_font(path: str, size: int):
-    try:
-        return ImageFont.truetype(path, size)
-    except OSError:
-        try:
-            return ImageFont.truetype("arial.ttf", size) # Fallback to standard arial
-        except Exception:
-            return ImageFont.load_default()
-
-# 🔥 Clone Bot Premium Thumbnail Logic
 async def get_thumb(videoid: str, *args, **kwargs) -> str:
-    # Clone bot cache handling via args/kwargs
-    cache_prefix = str(args[0]) if args else kwargs.get("bot_username", "main_bot")
-    custom_thumb = kwargs.get("thumb_url") or kwargs.get("thumbnail")
+    # Clone bot ko alag rakhne ke liye
+    cache_prefix = str(args[0]) if args else kwargs.get("bot_username", "main")
     
-    cache_path = os.path.join(CACHE_DIR, f"{videoid}_{cache_prefix}_v5_premium.png")
+    cache_path = os.path.join(CACHE_DIR, f"{videoid}_{cache_prefix}_v4_first_img.png")
     if os.path.exists(cache_path):
         return cache_path
 
-    # Unique temp file
-    unique_id = f"{int(time.time())}_{random.randint(100, 999)}"
-    thumb_path = os.path.join(CACHE_DIR, f"raw_{cache_prefix}_{videoid}_{unique_id}.png")
-
-    # Fetch Data from YouTube
+    # YouTube video data fetch karne ke liye (Gaane ka hi thumbnail chahiye)
     results = VideosSearch(f"https://www.youtube.com/watch?v={videoid}", limit=1)
     try:
         results_data = await results.next()
-        data = results_data.get("result", [])[0]
+        result_items = results_data.get("result", [])
+        if not result_items:
+            raise ValueError("No results found.")
+        data = result_items[0]
         title = re.sub(r"\W+", " ", data.get("title", "Unsupported Title")).title()
         
-        # Priority to Clone bot's custom thumbnail, else YouTube thumbnail
-        if custom_thumb:
-            thumbnail = custom_thumb
-        else:
-            thumbnail = data.get("thumbnails", [{}])[0].get("url", YOUTUBE_IMG_URL)
-            
+        # YouTube ka actual thumbnail nikal rahe hain
+        song_thumbnail = data.get("thumbnails", [{}])[0].get("url")
         duration = data.get("duration")
         views = data.get("viewCount", {}).get("short", "Unknown Views")
-        channel_name = data.get("channel", {}).get("name", "YouTube")
     except Exception:
-        title, thumbnail, duration, views, channel_name = "Unsupported Title", custom_thumb or YOUTUBE_IMG_URL, None, "Unknown Views", "YouTube"
+        title, song_thumbnail, duration, views = "Unsupported Title", None, None, "Unknown Views"
 
     is_live = not duration or str(duration).strip().lower() in {"", "live", "live now"}
     duration_text = "Live" if is_live else duration or "00:00"
 
-    # Download raw image
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(thumbnail) as resp:
-                if resp.status == 200:
-                    async with aiofiles.open(thumb_path, "wb") as f:
-                        await f.write(await resp.read())
-    except Exception:
-        pass # Use fallback mechanism later if download fails
+    # Agar YouTube ka thumbnail nahi mila toh Config ya Clone ke file par fallback karega
+    clone_custom_thumb = kwargs.get("thumbnail") or kwargs.get("thumb_url")
+    final_target = song_thumbnail if song_thumbnail else (clone_custom_thumb or YOUTUBE_IMG_URL)
 
-    try:
-        # 1. Base Setup (Canvas 1280x720)
-        W, H = 1280, 720
+    # Clone Bot Local File Fix: Check if it's already a downloaded/local file
+    is_local_file = False
+    if final_target and os.path.isfile(str(final_target)):
+        is_local_file = True
+        raw_image_path = final_target
+    else:
+        unique_id = f"{int(time.time())}_{random.randint(100, 999)}"
+        raw_image_path = os.path.join(CACHE_DIR, f"raw_{cache_prefix}_{videoid}_{unique_id}.png")
+
+    # Sirf tab download karega jab wo local file na ho (Clone file error bachega)
+    if not is_local_file:
         try:
-            raw_img = Image.open(thumb_path).convert("RGBA")
-            base = ImageOps.fit(raw_img, (W, H), Image.LANCZOS)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(final_target) as resp:
+                    if resp.status == 200:
+                        async with aiofiles.open(raw_image_path, "wb") as f:
+                            await f.write(await resp.read())
         except Exception:
-            base = Image.new("RGBA", (W, H), (15, 15, 20, 255))
-            raw_img = base
+            if not os.path.exists(raw_image_path):
+                return YOUTUBE_IMG_URL
 
-        # 2. Background Dark & Blur
-        bg = base.filter(ImageFilter.GaussianBlur(30))
-        bg = ImageEnhance.Brightness(bg).enhance(0.4) # Darken background
-
-        # 3. Premium Glass Card (Panel)
-        PW, PH = 900, 600
-        PX, PY = (W - PW) // 2, (H - PH) // 2
+    try:
+        # Layout Coordinates Calculation (Exactly like 1st Image)
+        W, H = 1280, 720
+        PANEL_W, PANEL_H = 763, 545
+        PANEL_X = (W - PANEL_W) // 2
+        PANEL_Y = 88
         
-        card = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        cdraw = ImageDraw.Draw(card)
-        # Semi-transparent dark glass
-        cdraw.rounded_rectangle((PX, PY, PX + PW, PY + PH), radius=40, fill=(20, 25, 30, 160))
-        # Subtle border
-        cdraw.rounded_rectangle((PX, PY, PX + PW, PY + PH), radius=40, outline=(255, 255, 255, 30), width=2)
-        bg = Image.alpha_composite(bg, card)
-
-        # 4. Inner Thumbnail Image (Fit exactly, no stretching)
-        TW, TH = 760, 360
-        TX, TY = PX + (PW - TW) // 2, PY + 40
+        THUMB_W, THUMB_H = 542, 273
+        THUMB_X = PANEL_X + (PANEL_W - THUMB_W) // 2
+        THUMB_Y = PANEL_Y + 36
         
-        inner_thumb = ImageOps.fit(raw_img, (TW, TH), Image.LANCZOS)
-        tmask = Image.new("L", (TW, TH), 0)
-        ImageDraw.Draw(tmask).rounded_rectangle((0, 0, TW, TH), 25, fill=255)
-        bg.paste(inner_thumb, (TX, TY), tmask)
+        # 🔥 FIX: Sab kuch thumbnail ke ekdum LEFT me align kiya hai (1st image ki tarah)
+        TITLE_X = THUMB_X
+        META_X = THUMB_X
+        TITLE_Y = THUMB_Y + THUMB_H + 20
+        META_Y = TITLE_Y + 45
+        
+        # Progress bar ab thumbnail ki puri chaudaai (width) lega
+        BAR_X = THUMB_X
+        BAR_Y = META_Y + 50
+        BAR_TOTAL_LEN = THUMB_W # Exact thumbnail ke barabar
+        BAR_RED_LEN = int(BAR_TOTAL_LEN * 0.35) # 35% bhara hua dikhega
 
-        # 5. Fonts (Bada Size)
-        # Update paths if your assets folder structure is different!
-        title_font = load_font("SHUKLAMUSIC/assets/assets/font2.ttf", 46) # 🔥 Bada title
-        meta_font = load_font("SHUKLAMUSIC/assets/assets/font.ttf", 26)   # 🔥 Bada meta
-        time_font = load_font("SHUKLAMUSIC/assets/assets/font.ttf", 22)
+        # Base Image & Background Blur
+        try:
+            raw_img = Image.open(raw_image_path).convert("RGBA")
+        except Exception:
+            raw_img = Image.new("RGBA", (W, H), (20, 20, 20, 255))
+
+        base = ImageOps.fit(raw_img, (W, H), Image.LANCZOS)
+        bg = ImageEnhance.Brightness(base.filter(ImageFilter.BoxBlur(10))).enhance(0.6)
+
+        # Frosted glass panel
+        panel_area = bg.crop((PANEL_X, PANEL_Y, PANEL_X + PANEL_W, PANEL_Y + PANEL_H))
+        overlay = Image.new("RGBA", (PANEL_W, PANEL_H), (255, 255, 255, 170)) # 170 Transparency
+        frosted = Image.alpha_composite(panel_area, overlay)
+        mask = Image.new("L", (PANEL_W, PANEL_H), 0)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, PANEL_W, PANEL_H), 50, fill=255)
+        bg.paste(frosted, (PANEL_X, PANEL_Y), mask)
 
         draw = ImageDraw.Draw(bg)
-
-        # 6. Center Aligned Text
-        MAX_T_WIDTH = 800
-        safe_title = trim_to_width(title, title_font, MAX_T_WIDTH)
-        title_w = get_text_width(title_font, safe_title)
         
-        TITLE_X = PX + (PW - title_w) // 2
-        TITLE_Y = TY + TH + 35
-        # Draw Title (White)
-        draw.text((TITLE_X, TITLE_Y), safe_title, fill=(255, 255, 255, 255), font=title_font)
+        # 🔥 Fonts: 1st image ki tarah BADA aur BOLD font size (36)
+        try:
+            title_font = ImageFont.truetype("SHUKLAMUSIC/assets/assets/font2.ttf", 36)
+            regular_font = ImageFont.truetype("SHUKLAMUSIC/assets/assets/font.ttf", 20)
+        except OSError:
+            try:
+                title_font = ImageFont.truetype("arial.ttf", 36)
+                regular_font = ImageFont.truetype("arial.ttf", 20)
+            except Exception:
+                title_font = regular_font = ImageFont.load_default()
 
-        # Draw Meta (Gray)
-        meta_text = f"👤 {channel_name}   |   👁 {views}"
-        meta_w = get_text_width(meta_font, meta_text)
-        META_X = PX + (PW - meta_w) // 2
-        META_Y = TITLE_Y + 65
-        draw.text((META_X, META_Y), meta_text, fill=(180, 190, 200, 255), font=meta_font)
+        # Inner Thumbnail (Bina pichke set hoga)
+        thumb = ImageOps.fit(raw_img, (THUMB_W, THUMB_H), Image.LANCZOS)
+        tmask = Image.new("L", thumb.size, 0)
+        ImageDraw.Draw(tmask).rounded_rectangle((0, 0, THUMB_W, THUMB_H), 20, fill=255)
+        bg.paste(thumb, (THUMB_X, THUMB_Y), tmask)
 
-        # 7. Progress Bar (YouTube Style)
-        BAR_W = 660
-        BAR_X = PX + (PW - BAR_W) // 2
-        BAR_Y = META_Y + 60
+        # Text Drawing (Left aligned with thumbnail)
+        MAX_TITLE_WIDTH = THUMB_W
+        safe_title = trim_to_width(title, title_font, MAX_TITLE_WIDTH)
         
-        filled_len = int(BAR_W * 0.35) # Visually 35% filled
+        draw.text((TITLE_X, TITLE_Y), safe_title, fill="black", font=title_font)
+        draw.text((META_X, META_Y), f"YouTube | {views}", fill=(40, 40, 40, 255), font=regular_font)
+
+        # Progress bar (Exact size of 1st image)
+        draw.line([(BAR_X, BAR_Y), (BAR_X + BAR_RED_LEN, BAR_Y)], fill="red", width=6)
+        draw.line([(BAR_X + BAR_RED_LEN, BAR_Y), (BAR_X + BAR_TOTAL_LEN, BAR_Y)], fill="gray", width=5)
+        draw.ellipse([(BAR_X + BAR_RED_LEN - 8, BAR_Y - 8), (BAR_X + BAR_RED_LEN + 8, BAR_Y + 8)], fill="red")
+
+        # Time Texts (Left & Right perfectly aligned)
+        draw.text((BAR_X, BAR_Y + 15), "00:00", fill="black", font=regular_font)
+        end_text = "Live" if is_live else duration_text
+        end_w = get_text_width(regular_font, end_text)
+        draw.text((BAR_X + BAR_TOTAL_LEN - end_w, BAR_Y + 15), end_text, fill="red" if is_live else "black", font=regular_font)
+
+        # Icons (Centered)
+        ICONS_W, ICONS_H = 415, 45
+        ICONS_X = PANEL_X + (PANEL_W - ICONS_W) // 2
+        ICONS_Y = BAR_Y + 55
         
-        # Empty Bar (Gray)
-        draw.line([(BAR_X, BAR_Y), (BAR_X + BAR_W, BAR_Y)], fill=(255, 255, 255, 60), width=8)
-        # Filled Bar (Red)
-        draw.line([(BAR_X, BAR_Y), (BAR_X + filled_len, BAR_Y)], fill=(255, 0, 50, 255), width=8)
-        # Progress Dot (Knob)
-        draw.ellipse([(BAR_X + filled_len - 10, BAR_Y - 10), (BAR_X + filled_len + 10, BAR_Y + 10)], fill=(255, 255, 255, 255))
-
-        # Time Texts
-        draw.text((BAR_X, BAR_Y + 20), "00:00", fill=(200, 200, 200, 255), font=time_font)
-        dur_w = get_text_width(time_font, duration_text)
-        dur_color = (255, 50, 50, 255) if is_live else (200, 200, 200, 255)
-        draw.text((BAR_X + BAR_W - dur_w, BAR_Y + 20), duration_text, fill=dur_color, font=time_font)
-
-        # 8. Add Icons if exist
         icons_path = "SHUKLAMUSIC/assets/assets/play_icons.png"
         if os.path.isfile(icons_path):
-            try:
-                # Resize keeping aspect ratio
-                ic = Image.open(icons_path).convert("RGBA")
-                ic_ratio = ic.width / ic.height
-                IC_H = 40
-                IC_W = int(IC_H * ic_ratio)
-                ic = ic.resize((IC_W, IC_H))
-                
-                # Make white (since background is dark now)
-                r, g, b, a = ic.split()
-                white_ic = Image.merge("RGBA", (r.point(lambda *_: 255), g.point(lambda *_: 255), b.point(lambda *_: 255), a))
-                
-                # Center it right below the progress bar logic
-                IC_X = PX + (PW - IC_W) // 2
-                IC_Y = BAR_Y - 35 # Placed in the center above the bar
-                bg.paste(white_ic, (IC_X, IC_Y), white_ic)
-            except Exception:
-                pass
+            ic = Image.open(icons_path).resize((ICONS_W, ICONS_H)).convert("RGBA")
+            r, g, b, a = ic.split()
+            black_ic = Image.merge("RGBA", (r.point(lambda *_: 0), g.point(lambda *_: 0), b.point(lambda *_: 0), a))
+            bg.paste(black_ic, (ICONS_X, ICONS_Y), black_ic)
 
-        # Final Save
+        # Final save
         bg.convert("RGB").save(cache_path, quality=95)
         return cache_path
 
     finally:
-        # File Cleanup
-        if os.path.exists(thumb_path):
+        # Cleanup: Local clone file hogi toh wo delete nahi hogi
+        if not is_local_file and os.path.exists(raw_image_path):
             try:
-                os.remove(thumb_path)
+                os.remove(raw_image_path)
             except OSError:
                 pass
