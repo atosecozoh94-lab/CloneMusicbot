@@ -5,7 +5,8 @@ import time
 import aiofiles
 import aiohttp
 
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+# ✅ ImageOps add kiya gaya hai "ulte fule" image ko thik karne ke liye
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 from py_yt import VideosSearch
 
 # ✅ Bot imports
@@ -98,19 +99,27 @@ async def download_image(url: str, dest: str) -> bool:
 # 💎 PREMIUM THUMBNAIL LOGIC
 # ==========================================
 async def get_thumb(videoid: str, *args, **kwargs) -> str:
-    # Handle Arguments Flexibly
+    # Handle Arguments Flexibly (CLONE BOT FIX)
     main_bot_username = getattr(app, "username", "MusicBot")
+    
+    # Agar clone bot id/username pass karta hai, toh usko capture karenge
+    bot_username = kwargs.get("bot_username", kwargs.get("bot_id", main_bot_username))
+    
     player_username = None
     if len(args) > 0:
         player_username = str(args[0])
     elif "player_username" in kwargs:
         player_username = str(kwargs["player_username"])
         
-    current_username = player_username if (player_username and player_username != "None") else main_bot_username
+    current_username = player_username if (player_username and player_username != "None") else bot_username
 
+    # Cache name alag-alag banega takki main aur clone bot ki photo aapas me mix na ho
     cache_path = os.path.join(CACHE_DIR, f"{videoid}_{current_username}_premium.png")
     if os.path.exists(cache_path):
         return cache_path
+
+    # Agar bot/clone bot ka apna custom thumbnail pass hua hai
+    custom_thumb_url = kwargs.get("thumb_url") or kwargs.get("thumbnail")
 
     unique_id = f"{videoid}_{int(time.time())}_{random.randint(100, 999)}"
     thumb_path = os.path.join(CACHE_DIR, f"raw_premium_{unique_id}.png")
@@ -123,11 +132,17 @@ async def get_thumb(videoid: str, *args, **kwargs) -> str:
             data = results_data.get("result", [])[0]
             title = re.sub(r"\W+", " ", data.get("title", "Unsupported Title")).title()
             artist = data.get("channel", {}).get("name", "Unknown Artist")
-            thumbnail = data.get("thumbnails", [{}])[0].get("url") or get_random_fallback_img()
+            
+            # 🛠 FIX: Agar clone bot apna thumbnail pass kare, toh youtube video ka thumbnail use na kare
+            if custom_thumb_url:
+                thumbnail = custom_thumb_url
+            else:
+                thumbnail = data.get("thumbnails", [{}])[0].get("url") or get_random_fallback_img()
+                
             duration = data.get("duration")
             views = data.get("viewCount", {}).get("short", "Unknown Views")
         except Exception:
-            title, artist, thumbnail, duration, views = "Unsupported Title", "Unknown Artist", get_random_fallback_img(), None, "Unknown Views"
+            title, artist, thumbnail, duration, views = "Unsupported Title", "Unknown Artist", custom_thumb_url or get_random_fallback_img(), None, "Unknown Views"
 
         is_live = not duration or str(duration).strip().lower() in {"", "live", "live now"}
         duration_text = "Live" if is_live else duration or "Unknown Mins"
@@ -141,9 +156,12 @@ async def get_thumb(videoid: str, *args, **kwargs) -> str:
         W, H = 1280, 720
         
         try:
-            base = Image.open(thumb_path).resize((W, H)).convert("RGBA")
+            raw_img = Image.open(thumb_path).convert("RGBA")
+            # 🛠 FIX: Background ke liye fit use kiya taaki dimension na bigde
+            base = ImageOps.fit(raw_img, (W, H), Image.LANCZOS)
         except Exception:
             base = Image.new("RGBA", (W, H), (20, 20, 30, 255))
+            raw_img = base
 
         # 1. Background Blur & Dark Gradient Overlay
         bg = base.filter(ImageFilter.GaussianBlur(40))
@@ -174,7 +192,12 @@ async def get_thumb(videoid: str, *args, **kwargs) -> str:
         bg = Image.alpha_composite(bg, shadow)
         
         # Image Masking & Border
-        album = base.resize((album_size, album_size), Image.LANCZOS)
+        # 🛠 FIX "Ulta-Fula": ImageOps.fit properly crops image perfectly square center without stretching it.
+        try:
+            album = ImageOps.fit(raw_img, (album_size, album_size), Image.LANCZOS)
+        except Exception:
+            album = base.resize((album_size, album_size), Image.LANCZOS)
+            
         mask = Image.new("L", (album_size, album_size), 0)
         ImageDraw.Draw(mask).rounded_rectangle((0, 0, album_size, album_size), radius=35, fill=255)
         
