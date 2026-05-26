@@ -1,171 +1,279 @@
 import os
 import re
-import time
 import random
+import time
 import aiofiles
 import aiohttp
+
+# ✅ ImageOps add kiya gaya hai "ulta-fula" image stretch ko theek karne ke liye
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 from py_yt import VideosSearch
+
+# ✅ Bot imports
+from PritiMusic import app
 from config import YOUTUBE_IMG_URL
 
-# Constants
 CACHE_DIR = "cache"
+ASSETS_DIR = "PritiMusic/assets"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-PANEL_W, PANEL_H = 763, 545
-PANEL_X = (1280 - PANEL_W) // 2
-PANEL_Y = 88
-TRANSPARENCY = 170
-INNER_OFFSET = 36
+# ==========================================
+# COMMON HELPERS
+# ==========================================
+def get_random_fallback_img():
+    if YOUTUBE_IMG_URL:
+        if isinstance(YOUTUBE_IMG_URL, list):
+            return random.choice(YOUTUBE_IMG_URL)
+        return YOUTUBE_IMG_URL
+    return "https://telegra.ph/file/2e3d368e77c449c287430.jpg"
 
-THUMB_W, THUMB_H = 542, 273
-THUMB_X = PANEL_X + (PANEL_W - THUMB_W) // 2
-THUMB_Y = PANEL_Y + INNER_OFFSET
+def get_font(size: int, bold: bool = False):
+    font_candidates = [
+        os.path.join(ASSETS_DIR, "font2.ttf" if bold else "font.ttf"),
+        os.path.join(ASSETS_DIR, "Roboto-Bold.ttf" if bold else "Roboto-Regular.ttf"),
+        "arial.ttf",
+    ]
+    for path in font_candidates:
+        try:
+            return ImageFont.truetype(path, size=size)
+        except Exception:
+            continue
+    return ImageFont.load_default()
 
-TITLE_X = 377
-META_X = 377
-TITLE_Y = THUMB_Y + THUMB_H + 10
-META_Y = TITLE_Y + 45
-
-BAR_X, BAR_Y = 388, META_Y + 45
-BAR_RED_LEN = 280
-BAR_TOTAL_LEN = 480
-
-ICONS_W, ICONS_H = 415, 45
-ICONS_X = PANEL_X + (PANEL_W - ICONS_W) // 2
-ICONS_Y = BAR_Y + 48
-
-MAX_TITLE_WIDTH = 580
-
-def trim_to_width(text: str, font: ImageFont.FreeTypeFont, max_w: int) -> str:
-    ellipsis = "…"
+def text_width(font, text: str) -> int:
     try:
-        if font.getlength(text) <= max_w:
-            return text
-        for i in range(len(text) - 1, 0, -1):
-            if font.getlength(text[:i] + ellipsis) <= max_w:
-                return text[:i] + ellipsis
+        return int(font.getlength(text))
     except Exception:
-        pass
-    return ellipsis
+        bbox = font.getbbox(text)
+        return bbox[2] - bbox[0]
 
-async def get_thumb(videoid: str, *args, **kwargs) -> str:
-    # Clone bot ko alag rakhne ke liye
-    cache_prefix = str(args[0]) if args else kwargs.get("bot_username", "main")
+def wrap_text_lines(text: str, font, max_width: int, max_lines: int = 2):
+    words = str(text or "").split()
+    if not words:
+        return ["Unknown Title"]
+    lines = []
+    current = ""
+    for word in words:
+        test = f"{current} {word}".strip()
+        if text_width(font, test) <= max_width:
+            current = test
+        else:
+            if current:
+                lines.append(current)
+            current = word
+            if len(lines) >= max_lines - 1:
+                break
+    if current and len(lines) < max_lines:
+        lines.append(current)
+    if not lines:
+        lines = ["Unknown Title"]
     
-    cache_path = os.path.join(CACHE_DIR, f"{videoid}_{cache_prefix}_v4_fixed.png")
+    # Truncate last line with ellipsis if it exceeds max_lines
+    if len(lines) == max_lines:
+        last_line = lines[-1]
+        ellipsis = "..."
+        if text_width(font, last_line) > max_width:
+            for i in range(len(last_line), 0, -1):
+                if text_width(font, last_line[:i] + ellipsis) <= max_width:
+                    lines[-1] = last_line[:i] + ellipsis
+                    break
+    return lines[:max_lines]
+
+async def download_image(url: str, dest: str) -> bool:
+    try:
+        timeout = aiohttp.ClientTimeout(total=15)
+        headers = {"User-Agent": "Mozilla/5.0"}
+        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    return False
+                data = await resp.read()
+                async with aiofiles.open(dest, "wb") as f:
+                    await f.write(data)
+        return True
+    except Exception:
+        return False
+
+
+# ==========================================
+# 💎 PREMIUM THUMBNAIL LOGIC
+# ==========================================
+async def get_thumb(videoid: str, *args, **kwargs) -> str:
+    # Handle Arguments Flexibly
+    main_bot_username = getattr(app, "username", "MusicBot")
+    player_username = None
+    if len(args) > 0:
+        player_username = str(args[0])
+    elif "player_username" in kwargs:
+        player_username = str(kwargs["player_username"])
+        
+    current_username = player_username if (player_username and player_username != "None") else main_bot_username
+
+    cache_path = os.path.join(CACHE_DIR, f"{videoid}_{current_username}_premium.png")
     if os.path.exists(cache_path):
         return cache_path
 
-    # YouTube video data fetch karne ke liye (Gaane ka hi thumbnail chahiye)
-    results = VideosSearch(f"https://www.youtube.com/watch?v={videoid}", limit=1)
+    thumb_path = "" # Defined beforehand so finally block doesn't throw error
+
     try:
-        results_data = await results.next()
-        result_items = results_data.get("result", [])
-        if not result_items:
-            raise ValueError("No results found.")
-        data = result_items[0]
-        title = re.sub(r"\W+", " ", data.get("title", "Unsupported Title")).title()
+        # Fetch Data
+        results = VideosSearch(f"https://www.youtube.com/watch?v={videoid}", limit=1)
+        try:
+            results_data = await results.next()
+            data = results_data.get("result", [])[0]
+            title = re.sub(r"\W+", " ", data.get("title", "Unsupported Title")).title()
+            artist = data.get("channel", {}).get("name", "Unknown Artist")
+            thumbnail = data.get("thumbnails", [{}])[0].get("url") or get_random_fallback_img()
+            duration = data.get("duration")
+            views = data.get("viewCount", {}).get("short", "Unknown Views")
+        except Exception:
+            title, artist, thumbnail, duration, views = "Unsupported Title", "Unknown Artist", get_random_fallback_img(), None, "Unknown Views"
+
+        # 🛑 FIX: Agar bot Main Bot nahi hai, toh sidha original thumbnail ka URL bhej do (Design mat banao)
+        if current_username != main_bot_username:
+            return thumbnail
+
+        is_live = not duration or str(duration).strip().lower() in {"", "live", "live now"}
+        duration_text = "Live" if is_live else duration or "Unknown Mins"
+
+        # unique id & path only generated if it's the main bot
+        unique_id = f"{videoid}_{int(time.time())}_{random.randint(100, 999)}"
+        thumb_path = os.path.join(CACHE_DIR, f"raw_premium_{unique_id}.png")
+
+        # Download raw thumbnail
+        await download_image(thumbnail, thumb_path)
+
+        # --------------------------------------------------
+        # 🎨 PIL DRAWING - LUXURY DESIGN
+        # --------------------------------------------------
+        W, H = 1280, 720
         
-        # YouTube ka actual thumbnail nikal rahe hain
-        song_thumbnail = data.get("thumbnails", [{}])[0].get("url")
-        duration = data.get("duration")
-        views = data.get("viewCount", {}).get("short", "Unknown Views")
-    except Exception:
-        title, song_thumbnail, duration, views = "Unsupported Title", None, None, "Unknown Views"
-
-    is_live = not duration or str(duration).strip().lower() in {"", "live", "live now"}
-    duration_text = "Live" if is_live else duration or "Unknown Mins"
-
-    # Agar YouTube ka thumbnail nahi mila toh Config ya Clone ke file par fallback karega
-    clone_custom_thumb = kwargs.get("thumbnail") or kwargs.get("thumb_url")
-    final_target = song_thumbnail if song_thumbnail else (clone_custom_thumb or YOUTUBE_IMG_URL)
-
-    # Clone Bot Local File Fix: Check if it's already a downloaded/local file
-    is_local_file = False
-    if final_target and os.path.isfile(str(final_target)):
-        is_local_file = True
-        raw_image_path = final_target
-    else:
-        unique_id = f"{int(time.time())}_{random.randint(100, 999)}"
-        raw_image_path = os.path.join(CACHE_DIR, f"raw_{cache_prefix}_{videoid}_{unique_id}.png")
-
-    # Sirf tab download karega jab wo local file na ho (Clone file error bachega)
-    if not is_local_file:
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(final_target) as resp:
-                    if resp.status == 200:
-                        async with aiofiles.open(raw_image_path, "wb") as f:
-                            await f.write(await resp.read())
+            raw_img = Image.open(thumb_path).convert("RGBA")
+            # 🛑 FIX 1: Background ke liye fit use kiya
+            base = ImageOps.fit(raw_img, (W, H), Image.LANCZOS)
         except Exception:
-            if not os.path.exists(raw_image_path):
-                return YOUTUBE_IMG_URL
+            raw_img = Image.new("RGBA", (W, H), (20, 20, 30, 255))
+            base = raw_img
 
-    try:
-        # 🔥 Ulta-Fula FIX: .resize ki jagah ImageOps.fit use kiya gaya hai taaki frame me perfect aaye
+        # 1. Background Blur & Dark Gradient Overlay
+        bg = base.filter(ImageFilter.GaussianBlur(40))
+        bg = ImageEnhance.Brightness(bg).enhance(0.4) # Darken base
+        
+        dark_overlay = Image.new("RGBA", (W, H), (10, 12, 22, 190)) # Deep navy/black tint
+        bg = Image.alpha_composite(bg, dark_overlay)
+
+        # 2. Subtle Neon Accents (Glow)
+        glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        gdraw = ImageDraw.Draw(glow)
+        # Top-Left Cyan Glow
+        gdraw.ellipse((-150, -150, 450, 450), fill=(0, 220, 255, 60))
+        # Bottom-Right Purple Glow
+        gdraw.ellipse((850, 350, 1450, 950), fill=(160, 40, 255, 50))
+        glow = glow.filter(ImageFilter.GaussianBlur(90))
+        bg = Image.alpha_composite(bg, glow)
+
+        # 3. Left Album Image with Shadow & Gold Border
+        album_size = 480
+        album_x, album_y = 60, 110
+        
+        # Shadow
+        shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        sdraw = ImageDraw.Draw(shadow)
+        sdraw.rounded_rectangle((album_x + 12, album_y + 18, album_x + album_size + 12, album_y + album_size + 18), radius=40, fill=(0, 0, 0, 160))
+        shadow = shadow.filter(ImageFilter.GaussianBlur(18))
+        bg = Image.alpha_composite(bg, shadow)
+        
+        # Image Masking & Border
+        # 🛑 FIX 2: "Ulta-Fula" theek karne ke liye ImageOps.fit use kiya
         try:
-            raw_img = Image.open(raw_image_path).convert("RGBA")
+            album = ImageOps.fit(raw_img, (album_size, album_size), Image.LANCZOS)
         except Exception:
-            raw_img = Image.new("RGBA", (1280, 720), (20, 20, 20, 255))
+            album = base.resize((album_size, album_size), Image.LANCZOS)
+            
+        mask = Image.new("L", (album_size, album_size), 0)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, album_size, album_size), radius=35, fill=255)
+        
+        album_border = Image.new("RGBA", (album_size, album_size), (0, 0, 0, 0))
+        ImageDraw.Draw(album_border).rounded_rectangle((0, 0, album_size, album_size), radius=35, outline=(220, 180, 110, 255), width=3) # Luxury Gold/Cream
+        album.paste(album_border, (0, 0), album_border)
+        bg.paste(album, (album_x, album_y), mask)
 
-        base = ImageOps.fit(raw_img, (1280, 720), Image.LANCZOS)
-        bg = ImageEnhance.Brightness(base.filter(ImageFilter.BoxBlur(10))).enhance(0.6)
+        # 4. Right Side "Glassmorphism" Card
+        card_x, card_y = 580, 110
+        card_w, card_h = 640, 480
+        
+        card = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        cdraw = ImageDraw.Draw(card)
+        # Frosted Glass Base
+        cdraw.rounded_rectangle((card_x, card_y, card_x + card_w, card_y + card_h), radius=35, fill=(255, 255, 255, 18))
+        # Glass Border
+        cdraw.rounded_rectangle((card_x, card_y, card_x + card_w, card_y + card_h), radius=35, outline=(255, 255, 255, 45), width=2)
+        bg = Image.alpha_composite(bg, card)
 
-        # Frosted glass panel
-        panel_area = bg.crop((PANEL_X, PANEL_Y, PANEL_X + PANEL_W, PANEL_Y + PANEL_H))
-        overlay = Image.new("RGBA", (PANEL_W, PANEL_H), (255, 255, 255, TRANSPARENCY))
-        frosted = Image.alpha_composite(panel_area, overlay)
-        mask = Image.new("L", (PANEL_W, PANEL_H), 0)
-        ImageDraw.Draw(mask).rounded_rectangle((0, 0, PANEL_W, PANEL_H), 50, fill=255)
-        bg.paste(frosted, (PANEL_X, PANEL_Y), mask)
-
-        # Draw details
+        # 5. Typography & Text Drawing
         draw = ImageDraw.Draw(bg)
-        try:
-            title_font = ImageFont.truetype("SHUKLAMUSIC/assets/assets/font2.ttf", 32)
-            regular_font = ImageFont.truetype("SHUKLAMUSIC/assets/assets/font.ttf", 18)
-        except OSError:
-            try:
-                title_font = ImageFont.truetype("arial.ttf", 32)
-                regular_font = ImageFont.truetype("arial.ttf", 18)
-            except Exception:
-                title_font = regular_font = ImageFont.load_default()
+        tag_font = get_font(22, bold=True)
+        title_font = get_font(48, bold=True)
+        sub_font = get_font(26, bold=False)
+        time_font = get_font(22, bold=False)
+        tagline_font = get_font(20, bold=False)
 
-        # 🔥 Inner Thumbnail Fix (Bina dabaye set karega)
-        thumb = ImageOps.fit(raw_img, (THUMB_W, THUMB_H), Image.LANCZOS)
-        tmask = Image.new("L", thumb.size, 0)
-        ImageDraw.Draw(tmask).rounded_rectangle((0, 0, THUMB_W, THUMB_H), 20, fill=255)
-        bg.paste(thumb, (THUMB_X, THUMB_Y), tmask)
+        # Badge: Now Playing
+        draw.text((card_x + 45, card_y + 45), f"NOW PLAYING  •  @{current_username}", fill=(0, 230, 255, 255), font=tag_font)
 
-        draw.text((TITLE_X, TITLE_Y), trim_to_width(title, title_font, MAX_TITLE_WIDTH), fill="black", font=title_font)
-        draw.text((META_X, META_Y), f"YouTube | {views}", fill="black", font=regular_font)
+        # Title (Wrapped)
+        title_lines = wrap_text_lines(title, title_font, card_w - 90, 2)
+        text_y = card_y + 100
+        for line in title_lines:
+            draw.text((card_x + 45, text_y), line, fill=(255, 255, 255, 255), font=title_font)
+            text_y += 65
 
-        # Progress bar
-        draw.line([(BAR_X, BAR_Y), (BAR_X + BAR_RED_LEN, BAR_Y)], fill="red", width=6)
-        draw.line([(BAR_X + BAR_RED_LEN, BAR_Y), (BAR_X + BAR_TOTAL_LEN, BAR_Y)], fill="gray", width=5)
-        draw.ellipse([(BAR_X + BAR_RED_LEN - 7, BAR_Y - 7), (BAR_X + BAR_RED_LEN + 7, BAR_Y + 7)], fill="red")
+        # Meta: Artist & Views
+        meta_y = card_y + 260
+        draw.text((card_x + 45, meta_y), f"👤 By: {artist}", fill=(200, 210, 225, 240), font=sub_font)
+        draw.text((card_x + 45, meta_y + 40), f"👁 Views: {views}", fill=(160, 175, 195, 220), font=sub_font)
 
-        draw.text((BAR_X, BAR_Y + 15), "00:00", fill="black", font=regular_font)
-        end_text = "Live" if is_live else duration_text
-        draw.text((BAR_X + BAR_TOTAL_LEN - (90 if is_live else 60), BAR_Y + 15), end_text, fill="red" if is_live else "black", font=regular_font)
+        # 6. Premium Progress Bar
+        bar_x = card_x + 45
+        bar_y = card_y + 380
+        bar_w = card_w - 90
+        fill_ratio = 0.35 # 35% filled visually
+        progress_px = int(bar_w * fill_ratio)
+        
+        # Empty Track (Gray)
+        draw.line((bar_x, bar_y, bar_x + bar_w, bar_y), fill=(255, 255, 255, 50), width=6)
+        # Filled Track (Cyan)
+        draw.line((bar_x, bar_y, bar_x + progress_px, bar_y), fill=(0, 230, 255, 255), width=6)
+        
+        # Glowing Knob
+        knob_cx, knob_cy = bar_x + progress_px, bar_y
+        # Knob outer glow
+        draw.ellipse((knob_cx - 12, knob_cy - 12, knob_cx + 12, knob_cy + 12), fill=(0, 230, 255, 100))
+        # Knob inner circle
+        draw.ellipse((knob_cx - 6, knob_cy - 6, knob_cx + 6, knob_cy + 6), fill=(255, 255, 255, 255))
 
-        # Icons
-        icons_path = "SHUKLAMUSIC/assets/assets/play_icons.png"
-        if os.path.isfile(icons_path):
-            ic = Image.open(icons_path).resize((ICONS_W, ICONS_H)).convert("RGBA")
-            r, g, b, a = ic.split()
-            black_ic = Image.merge("RGBA", (r.point(lambda *_: 0), g.point(lambda *_: 0), b.point(lambda *_: 0), a))
-            bg.paste(black_ic, (ICONS_X, ICONS_Y), black_ic)
+        # Time Labels
+        draw.text((bar_x, bar_y + 15), "00:00", fill=(180, 190, 200, 255), font=time_font)
+        duration_w = text_width(time_font, duration_text)
+        draw.text((bar_x + bar_w - duration_w, bar_y + 15), duration_text, fill=(0, 230, 255, 255) if is_live else (180, 190, 200, 255), font=time_font)
 
-        # Final save
-        bg.save(cache_path)
+        # 7. Bottom Luxury Tagline
+        tagline = "✨ High Quality Streaming Experience"
+        tagline_w = text_width(tagline_font, tagline)
+        draw.text(((W - tagline_w) // 2, 670), tagline, fill=(150, 160, 180, 200), font=tagline_font)
+
+        # Save the final masterpiece
+        final_img = bg.convert("RGB")
+        final_img.save(cache_path, quality=95)
         return cache_path
 
+    except Exception as e:
+        return get_random_fallback_img()
     finally:
-        # Cleanup: Raw image delete hogi, lekin agar Clone ki Local file thi toh usko delete nahi karega
-        if not is_local_file and os.path.exists(raw_image_path):
+        # Cleanup Raw Image safely
+        if thumb_path and os.path.exists(thumb_path):
             try:
-                os.remove(raw_image_path)
+                os.remove(thumb_path)
             except OSError:
                 pass
