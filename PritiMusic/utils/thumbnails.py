@@ -1,259 +1,192 @@
 import os
 import re
 import random
-import time
 import aiofiles
 import aiohttp
-
-from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
+from unidecode import unidecode
 from py_yt import VideosSearch
 
-# ✅ Bot imports (Make sure these exist in your repo)
+# PritiMusic ke imports
 from PritiMusic import app
 from config import YOUTUBE_IMG_URL
 
 CACHE_DIR = "cache"
-ASSETS_DIR = "PritiMusic/assets"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-# ==========================================
-# COMMON HELPERS
-# ==========================================
+# Naya text helper func (Second file se)
+def trim_to_width(text: str, font, max_width: int) -> str:
+    ellipsis = "..."
+    # Font error handling if getlength is not supported in older PIL
+    try:
+        length = font.getlength(text)
+    except AttributeError:
+        try:
+            length, _ = font.getsize(text)
+        except:
+            length = len(text) * 15 # rough estimate
+
+    if length <= max_width:
+        return text
+        
+    for i in range(len(text), 0, -1):
+        new = text[:i] + ellipsis
+        try:
+            new_len = font.getlength(new)
+        except AttributeError:
+            try:
+                new_len, _ = font.getsize(new)
+            except:
+                new_len = len(new) * 15
+                
+        if new_len <= max_width:
+            return new
+    return ellipsis
+
+# Helper for Random Fallback (Pehle file se)
 def get_random_fallback_img():
     if YOUTUBE_IMG_URL:
         if isinstance(YOUTUBE_IMG_URL, list):
             return random.choice(YOUTUBE_IMG_URL)
         return YOUTUBE_IMG_URL
-    return "https://telegra.ph/file/2e3d368e77c449c287430.jpg"
+    return "https://telegra.ph/file/2e3d368e77c449c287430.jpg" # Fallback
 
-def get_font(size: int, bold: bool = False):
-    font_candidates = [
-        os.path.join(ASSETS_DIR, "font2.ttf" if bold else "font.ttf"),
-        os.path.join(ASSETS_DIR, "Roboto-Bold.ttf" if bold else "Roboto-Regular.ttf"),
-        "arial.ttf",
-    ]
-    for path in font_candidates:
-        try:
-            return ImageFont.truetype(path, size=size)
-        except Exception:
-            continue
-    return ImageFont.load_default()
-
-def text_width(font, text: str) -> int:
-    try:
-        return int(font.getlength(text))
-    except Exception:
-        bbox = font.getbbox(text)
-        return bbox[2] - bbox[0] if bbox else 10
-
-def wrap_text_lines(text: str, font, max_width: int, max_lines: int = 2):
-    words = str(text or "Unknown Title").split()
-    lines, current = [], ""
-    for word in words:
-        test = f"{current} {word}".strip()
-        if text_width(font, test) <= max_width:
-            current = test
-        else:
-            if current:
-                lines.append(current)
-            current = word
-            if len(lines) >= max_lines - 1:
-                break
-    if current and len(lines) < max_lines:
-        lines.append(current)
-    
-    if not lines:
-        lines = ["Unknown Title"]
-    
-    # Truncate with ellipsis if it's too long
-    if len(lines) == max_lines and text_width(font, lines[-1]) > max_width:
-        last_line = lines[-1]
-        while text_width(font, last_line + "...") > max_width and len(last_line) > 0:
-            last_line = last_line[:-1]
-        lines[-1] = last_line.strip() + "..."
-        
-    return lines[:max_lines]
-
-async def download_image(url: str, dest: str) -> bool:
-    try:
-        if not url or not url.startswith("http"):
-            return False
-        timeout = aiohttp.ClientTimeout(total=10)
-        headers = {"User-Agent": "Mozilla/5.0"}
-        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
-            async with session.get(url) as resp:
-                if resp.status == 200:
-                    data = await resp.read()
-                    async with aiofiles.open(dest, "wb") as f:
-                        await f.write(data)
-                    return True
-        return False
-    except Exception:
-        return False
-
-# Helper for rounded rectangles (if standard PIL lacks it)
-def add_corners(im, rad):
-    circle = Image.new('L', (rad * 2, rad * 2), 0)
-    draw = ImageDraw.Draw(circle)
-    draw.ellipse((0, 0, rad * 2 - 1, rad * 2 - 1), fill=255)
-    alpha = Image.new('L', im.size, 255)
-    w, h = im.size
-    alpha.paste(circle.crop((0, 0, rad, rad)), (0, 0))
-    alpha.paste(circle.crop((0, rad, rad, rad * 2)), (0, h - rad))
-    alpha.paste(circle.crop((rad, 0, rad * 2, rad)), (w - rad, 0))
-    alpha.paste(circle.crop((rad, rad, rad * 2, rad * 2)), (w - rad, h - rad))
-    im.putalpha(alpha)
-    return im
-
-
-# ==========================================
-# 💎 PRO LEVEL TECHNICAL THUMBNAIL LOGIC
-# ==========================================
-async def get_thumb(videoid: str, *args, **kwargs) -> str:
-    # 1. Identity Check
-    main_bot_username = getattr(app, "username", "MusicBot")
-    player_username = args[0] if len(args) > 0 else kwargs.get("bot_username") or kwargs.get("player_username")
-    current_username = player_username if player_username and str(player_username) != "None" else main_bot_username
-
-    custom_thumb = kwargs.get("thumb_url") or kwargs.get("image_url") or kwargs.get("thumbnail")
-    cache_path = os.path.join(CACHE_DIR, f"{videoid}_{current_username}_tech_premium.png")
-    
-    if os.path.exists(cache_path):
+async def get_thumb(videoid):
+    # PritiMusic ka purana cache format rakha gaya hai error se bachne ke liye
+    cache_path = os.path.join(CACHE_DIR, f"{videoid}.png")
+    if os.path.isfile(cache_path):
         return cache_path
 
-    unique_id = f"{videoid}_{current_username}_{int(time.time())}"
-    thumb_path = os.path.join(CACHE_DIR, f"raw_premium_{unique_id}.png")
-
+    url = f"https://www.youtube.com/watch?v={videoid}"
+    
+    # Video ki detail nikal rahe hain
     try:
-        # Fetch Data
-        try:
-            results = VideosSearch(f"https://www.youtube.com/watch?v={videoid}", limit=1)
-            results_data = await results.next()
-            data = results_data.get("result", [])[0]
-            title = re.sub(r"\W+", " ", data.get("title", "Unsupported Title")).title()
-            artist = data.get("channel", {}).get("name", "Unknown Artist")
-            thumbnail = custom_thumb if custom_thumb else (data.get("thumbnails", [{}])[0].get("url") or get_random_fallback_img())
-            duration = data.get("duration")
-            views = data.get("viewCount", {}).get("short", "Unknown Views")
-        except Exception:
-            title, artist, duration, views = "Unsupported Title", "Unknown Artist", None, "Unknown Views"
-            thumbnail = custom_thumb if custom_thumb else get_random_fallback_img()
+        results = VideosSearch(url, limit=1)
+        search_result = await results.next()
+        data = search_result.get("result", [])[0]
 
-        is_live = not duration or str(duration).strip().lower() in {"", "live", "live now"}
-        duration_text = "Live Stream" if is_live else f"{duration} Mins"
+        title = data.get("title", "Unknown Title")
+        title = re.sub("\W+", " ", title).title()
+        
+        artist = data.get("channel", {}).get("name", "Unknown Artist")
+        duration = data.get("duration", "00:00")
+        views = data.get("viewCount", {}).get("short", "0 views")
+        thumbnail = data.get("thumbnails", [{}])[0].get("url", "").split("?")[0]
+    except Exception as e:
+        title = "Unknown Title"
+        artist = "Unknown Artist"
+        duration = "05:00"
+        views = "1M views"
+        thumbnail = None
 
-        # 2. Download Image and open safely
-        success = await download_image(thumbnail, thumb_path)
+    if not thumbnail:
+        return get_random_fallback_img()
+
+    thumb_path = os.path.join(CACHE_DIR, f"raw_{videoid}.jpg")
+    try:
+        async with aiohttp.ClientSession() as s:
+            async with s.get(thumbnail) as r:
+                if r.status == 200:
+                    async with aiofiles.open(thumb_path, "wb") as f:
+                        await f.write(await r.read())
+    except:
+        return get_random_fallback_img()
+
+    # Nayi Design ke sath image banana shuru karte hain
+    try:
         W, H = 1280, 720
-        
-        try:
-            raw_img = Image.open(thumb_path).convert("RGBA") if success else Image.new("RGBA", (W, H), (22, 27, 34, 255))
-        except Exception:
-            raw_img = Image.new("RGBA", (W, H), (22, 27, 34, 255))
+        img = Image.open(thumb_path).convert("RGBA")
+        bg = img.resize((W, H))
+        bg = bg.filter(ImageFilter.GaussianBlur(radius=40))
+        enhancer = ImageEnhance.Brightness(bg)
+        bg = enhancer.enhance(0.4) # Background ko dark kiya
 
-        # --------------------------------------------------
-        # 🎨 PIL DRAWING - PRO DEV DASHBOARD
-        # --------------------------------------------------
-        # Create Blurred Background for Premium Look
-        bg = raw_img.resize((W, H), Image.LANCZOS)
-        bg = bg.filter(ImageFilter.GaussianBlur(radius=25))
-        
-        # Add dark overlay over the blurred background
-        overlay = Image.new("RGBA", (W, H), (13, 17, 23, 180)) # Dark translucent GitHub theme
-        bg = Image.alpha_composite(bg.convert("RGBA"), overlay)
         draw = ImageDraw.Draw(bg)
 
-        # Draw Tech Grid
-        for i in range(0, W, 50):
-            draw.line((i, 0, i, H), fill=(255, 255, 255, 12), width=1)
-        for i in range(0, H, 50):
-            draw.line((0, i, W, i), fill=(255, 255, 255, 12), width=1)
+        # Aapke bot ke folder se fonts lena (PritiMusic ke paths)
+        try:
+            font_bold = "PritiMusic/assets/font2.ttf"
+            font_med = "PritiMusic/assets/font.ttf"
+            title_font = ImageFont.truetype(font_bold, 60)
+            artist_font = ImageFont.truetype(font_med, 40)
+            time_font = ImageFont.truetype(font_med, 32)
+        except:
+            title_font = artist_font = time_font = ImageFont.load_default()
 
-        # ---- LEFT: SQUARE ALBUM ART ----
-        album_size = 460
-        album_x, album_y = 80, 130
-        
-        # Resize, crop to center, and round corners
-        album = ImageOps.fit(raw_img, (album_size, album_size), Image.LANCZOS)
-        album = add_corners(album, rad=25)
-        
-        # Tech Box brackets around Album Art
-        bracket_len, b_w = 40, 5
-        b_color = (88, 166, 255, 255) # GitHub Blue
-        
-        draw.line((album_x - 15, album_y - 15, album_x + bracket_len, album_y - 15), fill=b_color, width=b_w)
-        draw.line((album_x - 15, album_y - 15, album_x - 15, album_y + bracket_len), fill=b_color, width=b_w)
-        draw.line((album_x + album_size + 15, album_y + album_size + 15, album_x + album_size - bracket_len, album_y + album_size + 15), fill=b_color, width=b_w)
-        draw.line((album_x + album_size + 15, album_y + album_size + 15, album_x + album_size + 15, album_y + album_size - bracket_len), fill=b_color, width=b_w)
-        
-        bg.paste(album, (album_x, album_y), album)
+        frame_w, frame_h = 450, 450
+        frame_x, frame_y = 100, (H - frame_h) // 2 
 
-        # ---- RIGHT: TERMINAL DASHBOARD PANEL ----
-        card_x, card_y = 600, 130
-        card_w, card_h = 600, 460
+        album = img.resize((frame_w, frame_h), Image.LANCZOS)
         
-        # Terminal Background with border
-        draw.rounded_rectangle((card_x, card_y, card_x + card_w, card_y + card_h), radius=15, fill=(22, 27, 34, 240), outline=(48, 54, 61, 255), width=3)
-        # Terminal Header
-        draw.rounded_rectangle((card_x, card_y, card_x + card_w, card_y + 45), radius=15, fill=(48, 54, 61, 255))
-        # Mask bottom corners of header to keep it flush with box
-        draw.rectangle((card_x, card_y + 25, card_x + card_w, card_y + 45), fill=(48, 54, 61, 255))
+        mask = Image.new("L", (frame_w, frame_h), 0)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, frame_w, frame_h), radius=40, fill=255)
         
-        # MacOS style window buttons
-        draw.ellipse((card_x + 20, card_y + 15, card_x + 35, card_y + 30), fill=(255, 95, 86, 255))
-        draw.ellipse((card_x + 45, card_y + 15, card_x + 60, card_y + 30), fill=(255, 189, 46, 255))
-        draw.ellipse((card_x + 70, card_y + 15, card_x + 85, card_y + 30), fill=(39, 201, 63, 255))
-        
-        # Fonts
-        tag_font = get_font(20, bold=True)
-        title_font = get_font(44, bold=True)
-        sub_font = get_font(26, bold=False)
-        
-        # Top Terminal Text
-        draw.text((card_x + 110, card_y + 10), f"root@{current_username}:~# ./play_music.sh", fill=(139, 148, 158, 255), font=tag_font)
+        # Glow Effect Add Karna
+        glow = Image.new("RGBA", (frame_w + 40, frame_h + 40), (0, 0, 0, 0))
+        ImageDraw.Draw(glow).rounded_rectangle((20, 20, frame_w + 20, frame_h + 20), radius=40, fill=(0, 0, 0, 150))
+        glow = glow.filter(ImageFilter.GaussianBlur(radius=15))
+        bg.paste(glow, (frame_x - 20, frame_y - 20), glow)
 
-        text_y = card_y + 80
-        draw.text((card_x + 35, text_y), f"> STATUS: STREAMING SECURELY...", fill=(39, 201, 63, 255), font=sub_font)
-        
-        # Title Wrap
-        text_y += 50
-        title_lines = wrap_text_lines(title, title_font, card_w - 70, 2)
-        for line in title_lines:
-            draw.text((card_x + 35, text_y), f"{line}", fill=(201, 209, 217, 255), font=title_font)
-            text_y += 55
-            
-        # Metadata
-        text_y += 30
-        draw.text((card_x + 35, text_y), f"├── [Author] : {artist}", fill=(139, 148, 158, 255), font=sub_font)
-        draw.text((card_x + 35, text_y + 40), f"└── [Views]  : {views}", fill=(139, 148, 158, 255), font=sub_font)
+        # Image ko Paste Karna
+        bg.paste(album, (frame_x, frame_y), mask)
 
-        # Progress Bar Area
-        bar_y = card_y + 380
-        draw.text((card_x + 35, bar_y - 40), f"[Processing Timeline] : {duration_text}", fill=(88, 166, 255, 255), font=sub_font)
-        
-        # Modern Progress Bar Background & Fill
-        draw.rounded_rectangle((card_x + 35, bar_y, card_x + card_w - 35, bar_y + 15), radius=7, fill=(13, 17, 23, 255), outline=(139, 148, 158, 255), width=2)
-        
-        # Logic to simulate random progress or set to 35%
-        fill_width = int((card_w - 70) * 0.35) 
-        if is_live:
-            fill_width = int((card_w - 70) * 0.98) # Full for live
-        
-        draw.rounded_rectangle((card_x + 38, bar_y + 3, card_x + 35 + fill_width, bar_y + 12), radius=5, fill=(88, 166, 255, 255))
+        # Frame ki Boundary
+        draw.rounded_rectangle(
+            (frame_x, frame_y, frame_x + frame_w, frame_y + frame_h), 
+            radius=40, 
+            outline=(255, 255, 255, 80), 
+            width=6
+        )
 
-        # Save Final Image
-        final_img = bg.convert("RGB")
-        final_img.save(cache_path, quality=95)
+        # Transparent Glass box logic
+        text_x = 620
+        glass_rect = [text_x - 40, frame_y, W - 60, frame_y + frame_h]
+        overlay = Image.new('RGBA', (W, H), (0,0,0,0))
+        d_overlay = ImageDraw.Draw(overlay)
+        d_overlay.rounded_rectangle(glass_rect, radius=30, fill=(255, 255, 255, 25)) 
+        bg.alpha_composite(overlay)
+
+        # Fonts / Texts daalna
+        clean_title = trim_to_width(title, title_font, 600)
+        draw.text((text_x, frame_y + 40), clean_title, font=title_font, fill=(255, 255, 255, 255))
+        
+        clean_artist = trim_to_width(f"{artist}", artist_font, 550)
+        draw.text((text_x, frame_y + 120), clean_artist, font=artist_font, fill=(200, 200, 200, 230))
+
+        draw.text((text_x, frame_y + 190), f"Views: {views}", font=time_font, fill=(180, 180, 180, 200))
+
+        # Progress Bar Code
+        bar_width = 500
+        bar_height = 8
+        bar_x_pos = text_x
+        bar_y_pos = frame_y + 320
+
+        draw.rounded_rectangle((bar_x_pos, bar_y_pos, bar_x_pos + bar_width, bar_y_pos + bar_height), radius=4, fill=(255, 255, 255, 50))
+        
+        progress = 0.4 # Default Progress
+        draw.rounded_rectangle((bar_x_pos, bar_y_pos, bar_x_pos + (bar_width * progress), bar_y_pos + bar_height), radius=4, fill=(0, 200, 255, 255))
+        
+        # Circle on progress bar
+        circle_r = 10
+        draw.ellipse((bar_x_pos + (bar_width * progress) - circle_r, bar_y_pos + (bar_height/2) - circle_r, 
+                      bar_x_pos + (bar_width * progress) + circle_r, bar_y_pos + (bar_height/2) + circle_r), 
+                      fill=(255, 255, 255, 255))
+
+        draw.text((bar_x_pos, bar_y_pos + 25), "00:00", font=time_font, fill=(255, 255, 255, 200))
+        draw.text((bar_x_pos + bar_width - 80, bar_y_pos + 25), duration, font=time_font, fill=(255, 255, 255, 200))
+
+        # Image convert and save karna
+        bg = bg.convert("RGB")
+        bg.save(cache_path, quality=95)
+        
+        # Raw file remove karna taaki storage full na ho
+        try:
+            os.remove(thumb_path)
+        except:
+            pass
+
         return cache_path
-
+        
     except Exception as e:
-        print(f"Thumbnail Error: {e}")
+        print(f"Error in generating Thumbnail: {e}")
         return get_random_fallback_img()
-    finally:
-        # Cleanup
-        if os.path.exists(thumb_path):
-            try:
-                os.remove(thumb_path)
-            except OSError:
-                pass
-
