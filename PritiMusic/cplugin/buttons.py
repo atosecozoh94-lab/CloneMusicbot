@@ -15,6 +15,7 @@ def track_markup(_, videoid, user_id, channel, fplay):
                 callback_data=f"MusicStream {videoid}|{user_id}|v|{channel}|{fplay}",
             ),
         ],
+        [InlineKeyboardButton(text="YT-API STATUS 💌", callback_data="yt_api_status")],
         [
             InlineKeyboardButton(
                 text=_["CLOSE_BUTTON"],
@@ -48,6 +49,7 @@ def stream_markup_timer(_, chat_id, played, dur):
             InlineKeyboardButton(text="‣‣I", callback_data=f"ADMIN Skip|{chat_id}"),
             InlineKeyboardButton(text="▢", callback_data=f"ADMIN Stop|{chat_id}"),
         ],
+        [InlineKeyboardButton(text="YT-API STATUS 💌", callback_data="yt_api_status")],
         [InlineKeyboardButton(text=_["CLOSE_BUTTON"], callback_data="close")]
     ]
     return buttons
@@ -61,6 +63,7 @@ def stream_markup(_, chat_id):
             InlineKeyboardButton(text="‣‣I", callback_data=f"ADMIN Skip|{chat_id}"),
             InlineKeyboardButton(text="▢", callback_data=f"ADMIN Stop|{chat_id}"),
         ],
+        [InlineKeyboardButton(text="YT-API STATUS 💌", callback_data="yt_api_status")],
         [InlineKeyboardButton(text=_["CLOSE_BUTTON"], callback_data="close")]
     ]
     return buttons
@@ -71,6 +74,7 @@ def playlist_markup(_, videoid, user_id, ptype, channel, fplay):
             InlineKeyboardButton(text=_["P_B_1"], callback_data=f"LuckyPlaylists {videoid}|{user_id}|{ptype}|a|{channel}|{fplay}"),
             InlineKeyboardButton(text=_["P_B_2"], callback_data=f"LuckyPlaylists {videoid}|{user_id}|{ptype}|v|{channel}|{fplay}"),
         ],
+        [InlineKeyboardButton(text="YT-API STATUS 💌", callback_data="yt_api_status")],
         [InlineKeyboardButton(text=_["CLOSE_BUTTON"], callback_data=f"forceclose {videoid}|{user_id}")],
     ]
     return buttons
@@ -78,6 +82,7 @@ def playlist_markup(_, videoid, user_id, ptype, channel, fplay):
 def livestream_markup(_, videoid, user_id, mode, channel, fplay):
     buttons = [
         [InlineKeyboardButton(text=_["P_B_3"], callback_data=f"LiveStream {videoid}|{user_id}|{mode}|{channel}|{fplay}")],
+        [InlineKeyboardButton(text="YT-API STATUS 💌", callback_data="yt_api_status")],
         [InlineKeyboardButton(text=_["CLOSE_BUTTON"], callback_data=f"forceclose {videoid}|{user_id}")],
     ]
     return buttons
@@ -89,6 +94,7 @@ def slider_markup(_, videoid, user_id, query, query_type, channel, fplay):
             InlineKeyboardButton(text=_["P_B_1"], callback_data=f"MusicStream {videoid}|{user_id}|a|{channel}|{fplay}"),
             InlineKeyboardButton(text=_["P_B_2"], callback_data=f"MusicStream {videoid}|{user_id}|v|{channel}|{fplay}"),
         ],
+        [InlineKeyboardButton(text="YT-API STATUS 💌", callback_data="yt_api_status")],
         [
             InlineKeyboardButton(text="◁", callback_data=f"slider B|{query_type}|{query}|{user_id}|{channel}|{fplay}"),
             InlineKeyboardButton(text=_["CLOSE_BUTTON"], callback_data=f"forceclose {query}|{user_id}"),
@@ -99,6 +105,7 @@ def slider_markup(_, videoid, user_id, query, query_type, channel, fplay):
 
 def telegram_markup(_, chat_id):
     buttons = [
+        [InlineKeyboardButton(text="YT-API STATUS 💌", callback_data="yt_api_status")],
         [
             InlineKeyboardButton(text="Next", callback_data=f"PanelMarkup None|{chat_id}"),
             InlineKeyboardButton(text=_["CLOSEMENU_BUTTON"], callback_data="close"),
@@ -132,6 +139,7 @@ def stream_markup2(_, chat_id, bot_username):
             InlineKeyboardButton(text="‣‣I", callback_data=f"ADMIN Skip|{chat_id}"),
             InlineKeyboardButton(text="▢", callback_data=f"ADMIN Stop|{chat_id}"),
         ],
+        [InlineKeyboardButton(text="YT-API STATUS 💌", callback_data="yt_api_status")],
         [InlineKeyboardButton(text=_["CLOSEMENU_BUTTON"], callback_data="close")],
     ]
     return buttons
@@ -158,6 +166,7 @@ def stream_markup_timer2(_, chat_id, played, dur):
             InlineKeyboardButton(text="‣‣I", callback_data=f"ADMIN Skip|{chat_id}"),
             InlineKeyboardButton(text="▢", callback_data=f"ADMIN Stop|{chat_id}"),
         ],
+        [InlineKeyboardButton(text="YT-API STATUS 💌", callback_data="yt_api_status")],
         [InlineKeyboardButton(text=_["CLOSEMENU_BUTTON"], callback_data="close")],
     ]
     return buttons
@@ -266,6 +275,7 @@ def panel_markup_clone(_, vidid, chat_id):
             InlineKeyboardButton(text="‣‣I", callback_data=f"ADMIN Skip|{chat_id}"),
             InlineKeyboardButton(text="▢", callback_data=f"ADMIN Stop|{chat_id}"),
         ],
+        [InlineKeyboardButton(text="YT-API STATUS 💌", callback_data="yt_api_status")],
         [InlineKeyboardButton(text=_["CLOSE_BUTTON"], callback_data="close")]
     ]
     return buttons
