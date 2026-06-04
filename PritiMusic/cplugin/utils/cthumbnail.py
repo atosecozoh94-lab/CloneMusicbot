@@ -1,16 +1,8 @@
-# -----------------------------------------------
-# 🔸 Clonemusicbot Project
-# 🔹 Developed & Maintained by: Ronak Gupta (https://github.com/ronakgupta322)
+# ---------------------------------------------------------------
+# 🔸 CLONE MUSIC BOT Project
+# 🔹 Modified for: ronakgupta322 (https://github.com/ronakgupta322/clonemusicbot)
 # 📅 Copyright © 2026 – All Rights Reserved
-#
-# 📖 License:
-# This source code is open for educational and non-commercial use ONLY.
-# You are required to retain this credit in all copies or substantial portions of this file.
-# Commercial use, redistribution, or removal of this notice is strictly prohibited
-# without prior written permission from the author.
-#
-# ❤️ Made with dedication and love by Ronak Gupta
-# -----------------------------------------------
+# ---------------------------------------------------------------
 import os
 import re
 import aiofiles
@@ -19,8 +11,8 @@ from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 from py_yt import VideosSearch
 from config import YOUTUBE_IMG_URL
 
-# Constants (Clone ke thumbnail yaha save honge)
-CACHE_DIR = "clone_thumbnails"
+# Constants
+CACHE_DIR = "cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 PANEL_W, PANEL_H = 763, 545
@@ -57,12 +49,13 @@ def trim_to_width(text: str, font: ImageFont.FreeTypeFont, max_w: int) -> str:
             return text[:i] + ellipsis
     return ellipsis
 
-async def get_thumb(videoid: str) -> str:
+# ✅ FIXED: Added *args and **kwargs to prevent TypeError when play.py calls this function
+async def get_thumb(videoid: str, *args, **kwargs) -> str:
     cache_path = os.path.join(CACHE_DIR, f"{videoid}_v4.png")
     if os.path.exists(cache_path):
         return cache_path
 
-    # YouTube video data fetch accurately for matching song
+    # YouTube video data fetch
     results = VideosSearch(f"https://www.youtube.com/watch?v={videoid}", limit=1)
     try:
         results_data = await results.next()
@@ -71,44 +64,28 @@ async def get_thumb(videoid: str) -> str:
             raise ValueError("No results found.")
         data = result_items[0]
         title = re.sub(r"\W+", " ", data.get("title", "Unsupported Title")).title()
+        thumbnail = data.get("thumbnails", [{}])[0].get("url", YOUTUBE_IMG_URL)
         duration = data.get("duration")
         views = data.get("viewCount", {}).get("short", "Unknown Views")
     except Exception:
-        title, duration, views = "Unsupported Title", None, "Unknown Views"
+        title, thumbnail, duration, views = "Unsupported Title", YOUTUBE_IMG_URL, None, "Unknown Views"
 
     is_live = not duration or str(duration).strip().lower() in {"", "live", "live now"}
     duration_text = "Live" if is_live else duration or "Unknown Mins"
 
-    # High Quality Thumbnail URL Fetching
-    thumbnail_hq = f"https://img.youtube.com/vi/{videoid}/maxresdefault.jpg"
-    thumbnail_fallback = f"https://img.youtube.com/vi/{videoid}/hqdefault.jpg"
-    
-    thumb_path = os.path.join(CACHE_DIR, f"thumb_{videoid}.png")
-    
+    # Download thumbnail
+    thumb_path = os.path.join(CACHE_DIR, f"thumb{videoid}.png")
     try:
         async with aiohttp.ClientSession() as session:
-            # Phele High Quality try karenge
-            async with session.get(thumbnail_hq) as resp:
+            async with session.get(thumbnail) as resp:
                 if resp.status == 200:
                     async with aiofiles.open(thumb_path, "wb") as f:
                         await f.write(await resp.read())
-                else:
-                    # Agar MaxRes available nahi hai toh default HQ par fallback karega (Errors se bachne ke liye)
-                    async with session.get(thumbnail_fallback) as resp2:
-                        if resp2.status == 200:
-                            async with aiofiles.open(thumb_path, "wb") as f:
-                                await f.write(await resp2.read())
-                        else:
-                            raise ValueError("Thumbnail not found")
     except Exception:
         return YOUTUBE_IMG_URL
 
-    # Create base image with LANCZOS for high quality resizing
-    try:
-        base = Image.open(thumb_path).resize((1280, 720), Image.LANCZOS).convert("RGBA")
-    except Exception:
-        return YOUTUBE_IMG_URL
-
+    # Create base image
+    base = Image.open(thumb_path).resize((1280, 720)).convert("RGBA")
     bg = ImageEnhance.Brightness(base.filter(ImageFilter.BoxBlur(10))).enhance(0.6)
 
     # Frosted glass panel
@@ -122,13 +99,13 @@ async def get_thumb(videoid: str) -> str:
     # Draw details
     draw = ImageDraw.Draw(bg)
     try:
-        title_font = ImageFont.truetype("Clonemusicbot/assets/assets/font2.ttf", 32)
-        regular_font = ImageFont.truetype("Clonemusicbot/assets/assets/font.ttf", 18)
+        # ✅ UPDATED: Changed path to clonemusicbot
+        title_font = ImageFont.truetype("clonemusicbot/assets/assets/font2.ttf", 32)
+        regular_font = ImageFont.truetype("clonemusicbot/assets/assets/font.ttf", 18)
     except OSError:
         title_font = regular_font = ImageFont.load_default()
 
-    # Smaller Thumbnail inside Panel
-    thumb = base.resize((THUMB_W, THUMB_H), Image.LANCZOS)
+    thumb = base.resize((THUMB_W, THUMB_H))
     tmask = Image.new("L", thumb.size, 0)
     ImageDraw.Draw(tmask).rounded_rectangle((0, 0, THUMB_W, THUMB_H), 20, fill=255)
     bg.paste(thumb, (THUMB_X, THUMB_Y), tmask)
@@ -146,9 +123,10 @@ async def get_thumb(videoid: str) -> str:
     draw.text((BAR_X + BAR_TOTAL_LEN - (90 if is_live else 60), BAR_Y + 15), end_text, fill="red" if is_live else "black", font=regular_font)
 
     # Icons
-    icons_path = "Clonemusicbot/assets/assets/play_icons.png"
+    # ✅ UPDATED: Changed path to clonemusicbot
+    icons_path = "clonemusicbot/assets/assets/play_icons.png"
     if os.path.isfile(icons_path):
-        ic = Image.open(icons_path).resize((ICONS_W, ICONS_H), Image.LANCZOS).convert("RGBA")
+        ic = Image.open(icons_path).resize((ICONS_W, ICONS_H)).convert("RGBA")
         r, g, b, a = ic.split()
         black_ic = Image.merge("RGBA", (r.point(lambda *_: 0), g.point(lambda *_: 0), b.point(lambda *_: 0), a))
         bg.paste(black_ic, (ICONS_X, ICONS_Y), black_ic)
@@ -159,5 +137,5 @@ async def get_thumb(videoid: str) -> str:
     except OSError:
         pass
 
-    bg.save(cache_path, format="PNG", optimize=True)
+    bg.save(cache_path)
     return cache_path
