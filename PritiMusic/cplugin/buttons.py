@@ -33,7 +33,7 @@ def stream_markup_timer(_, chat_id, played, dur):
     if 0 < umm <= 10: bar = "◉—————————"
     elif 10 < umm < 20: bar = "—◉————————"
     elif 20 <= umm < 30: bar = "——◉———————"
-    elif 30 <= umm < 40: bar = "———◉——————"
+    elif 30 <= umm < 40: bar = "———◉————--"
     elif 40 <= umm < 50: bar = "————◉—————"
     elif 50 <= umm < 60: bar = "—————◉————"
     elif 60 <= umm < 70: bar = "——————◉———"
