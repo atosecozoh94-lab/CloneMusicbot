@@ -15,34 +15,34 @@ from config import YOUTUBE_IMG_URL
 CACHE_DIR = "cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-# ✅ MATCHING PANEL DIMENSIONS (Bada aur chaurha panel)
-PANEL_W, PANEL_H = 860, 600
+# ✅ BADA PANEL (Taki bade text ke liye jagah ho)
+PANEL_W, PANEL_H = 900, 600
 PANEL_X = (1280 - PANEL_W) // 2
 PANEL_Y = (720 - PANEL_H) // 2
-TRANSPARENCY = 210  # Photo jaisa solid frosted look
+TRANSPARENCY = 220  # Solid Frosted Glass
 
-# ✅ MATCHING INNER THUMBNAIL (Badi screen)
-THUMB_W, THUMB_H = 780, 360
+# ✅ BADA INNER THUMBNAIL
+THUMB_W, THUMB_H = 820, 340
 THUMB_X = PANEL_X + 40
 THUMB_Y = PANEL_Y + 40
 
-# ✅ LEFT-ALIGNED TEXT COORDINATES (Photo ke hisaab se)
+# ✅ EXACT LEFT ALIGNMENT & SPACING (Bade text ke hisaab se)
 TITLE_X = THUMB_X
 TITLE_Y = THUMB_Y + THUMB_H + 20
 
 META_X = THUMB_X
-META_Y = TITLE_Y + 45
+META_Y = TITLE_Y + 65
 
 # ✅ FULL WIDTH PROGRESS BAR
 BAR_X = THUMB_X
-BAR_Y = META_Y + 45
+BAR_Y = META_Y + 55
 BAR_TOTAL_LEN = THUMB_W
-BAR_RED_LEN = int(BAR_TOTAL_LEN * 0.45) # Red line ka size
+BAR_RED_LEN = int(BAR_TOTAL_LEN * 0.45) # 45% filled
 
 # ✅ ICONS AT BOTTOM CENTER
 ICONS_W, ICONS_H = 415, 45
 ICONS_X = PANEL_X + (PANEL_W - ICONS_W) // 2
-ICONS_Y = BAR_Y + 45
+ICONS_Y = BAR_Y + 40
 
 MAX_TITLE_WIDTH = THUMB_W - 20
 
@@ -103,9 +103,9 @@ async def get_thumb(videoid: str, *args, **kwargs) -> str:
 
     draw = ImageDraw.Draw(bg)
     try:
-        # ✅ PERFECT FONT SIZES
-        title_font = ImageFont.truetype("clonemusicbot/assets/assets/font2.ttf", 36)
-        regular_font = ImageFont.truetype("clonemusicbot/assets/assets/font.ttf", 20)
+        # ✅ MASSIVE FONT SIZES (Text ab chota nahi lagega)
+        title_font = ImageFont.truetype("clonemusicbot/assets/assets/font2.ttf", 50)  # 36 se seedha 50
+        regular_font = ImageFont.truetype("clonemusicbot/assets/assets/font.ttf", 30) # 20 se seedha 30
     except OSError:
         title_font = regular_font = ImageFont.load_default()
 
@@ -115,25 +115,25 @@ async def get_thumb(videoid: str, *args, **kwargs) -> str:
     ImageDraw.Draw(tmask).rounded_rectangle((0, 0, THUMB_W, THUMB_H), 25, fill=255)
     bg.paste(thumb, (THUMB_X, THUMB_Y), tmask)
 
-    # ✅ LEFT ALIGNED TEXT
+    # Title & Meta Details
     trimmed_title = trim_to_width(title, title_font, MAX_TITLE_WIDTH)
     meta_text = f"YouTube | {views}"
 
     draw.text((TITLE_X, TITLE_Y), trimmed_title, fill="black", font=title_font)
     draw.text((META_X, META_Y), meta_text, fill="#333333", font=regular_font)
 
-    # ✅ FULL WIDTH PROGRESS BAR
-    draw.line([(BAR_X, BAR_Y), (BAR_X + BAR_RED_LEN, BAR_Y)], fill="red", width=6)
-    draw.line([(BAR_X + BAR_RED_LEN, BAR_Y), (BAR_X + BAR_TOTAL_LEN, BAR_Y)], fill="#8E8E93", width=5)
-    draw.ellipse([(BAR_X + BAR_RED_LEN - 8, BAR_Y - 8), (BAR_X + BAR_RED_LEN + 8, BAR_Y + 8)], fill="red")
+    # Progress bar (Moti aur saaf)
+    draw.line([(BAR_X, BAR_Y), (BAR_X + BAR_RED_LEN, BAR_Y)], fill="red", width=8)
+    draw.line([(BAR_X + BAR_RED_LEN, BAR_Y), (BAR_X + BAR_TOTAL_LEN, BAR_Y)], fill="#8E8E93", width=6)
+    draw.ellipse([(BAR_X + BAR_RED_LEN - 10, BAR_Y - 10), (BAR_X + BAR_RED_LEN + 10, BAR_Y + 10)], fill="red")
 
-    # Time indicators (Left and Right aligned to the bar)
-    draw.text((BAR_X, BAR_Y + 15), "00:00", fill="black", font=regular_font)
+    # Time indicators (Aligned perfectly below the bar)
+    draw.text((BAR_X, BAR_Y + 20), "00:00", fill="black", font=regular_font)
     end_text = "Live" if is_live else duration_text
     end_text_w = draw.textlength(end_text, font=regular_font)
-    draw.text((BAR_X + BAR_TOTAL_LEN - end_text_w, BAR_Y + 15), end_text, fill="red" if is_live else "black", font=regular_font)
+    draw.text((BAR_X + BAR_TOTAL_LEN - end_text_w, BAR_Y + 20), end_text, fill="red" if is_live else "black", font=regular_font)
 
-    # Icons Layer Overlay
+    # Play Icons
     icons_path = "clonemusicbot/assets/assets/play_icons.png"
     if os.path.isfile(icons_path):
         ic = Image.open(icons_path).resize((ICONS_W, ICONS_H)).convert("RGBA")
@@ -141,7 +141,7 @@ async def get_thumb(videoid: str, *args, **kwargs) -> str:
         black_ic = Image.merge("RGBA", (r.point(lambda *_: 0), g.point(lambda *_: 0), b.point(lambda *_: 0), a))
         bg.paste(black_ic, (ICONS_X, ICONS_Y), black_ic)
 
-    # Cleanup temporary image file
+    # Cleanup
     try:
         os.remove(thumb_path)
     except OSError:
