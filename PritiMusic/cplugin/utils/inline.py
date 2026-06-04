@@ -14,7 +14,10 @@ buttons = InlineKeyboardMarkup(
 )
 
 close_key = InlineKeyboardMarkup(
-    [[InlineKeyboardButton(text="✯ ᴄʟᴏsᴇ ✯", callback_data="close")]]
+    [
+        [InlineKeyboardButton(text="ʏᴛ-ᴀᴘɪ sᴛᴀᴛᴜs 💌", callback_data="yt_api_status")],
+        [InlineKeyboardButton(text="✯ ᴄʟᴏsᴇ ✯", callback_data="close")]
+    ]
 )
 
 
@@ -30,6 +33,9 @@ def stream_markup(chat_id):
                 InlineKeyboardButton(text="II", callback_data=f"ADMIN Pause|{chat_id}"),
                 InlineKeyboardButton(text="‣‣I", callback_data=f"ADMIN Skip|{chat_id}"),
                 InlineKeyboardButton(text="▢", callback_data=f"ADMIN Stop|{chat_id}"),
+            ],
+            [
+                InlineKeyboardButton(text="ʏᴛ-ᴀᴘɪ sᴛᴀᴛᴜs 💌", callback_data="yt_api_status")
             ],
             [
                 InlineKeyboardButton(text="✯ ᴄʟᴏsᴇ ✯", callback_data="close")
