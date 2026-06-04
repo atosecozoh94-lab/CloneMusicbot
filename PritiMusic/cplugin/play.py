@@ -508,10 +508,7 @@ async def play_commnd(client, message: Message, _, chat_id, video, channel, play
             except:
                 C_SUPPORT_CHAT = config.SUPPORT_CHAT
             buttons = InlineKeyboardMarkup(
-                [
-                    [InlineKeyboardButton(text="ʏᴛ-ᴀᴘɪ sᴛᴀᴛᴜs 💌", callback_data="yt_api_status")],
-                    [InlineKeyboardButton(text="Support", url=C_SUPPORT_CHAT), InlineKeyboardButton(text="Close", callback_data="close")]
-                ]
+                [[InlineKeyboardButton(text="Support", url=C_SUPPORT_CHAT), InlineKeyboardButton(text="Close", callback_data="close")]]
             )
             play_img = get_random_img(config.PLAYLIST_IMG_URL) if hasattr(config, "PLAYLIST_IMG_URL") else "https://telegra.ph/file/2e3d368e77c449c287430.jpg"
             try:
