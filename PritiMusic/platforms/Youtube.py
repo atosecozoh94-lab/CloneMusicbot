@@ -21,7 +21,10 @@ API_1_URL = os.getenv("API_1_URL", "https://music.xbitcode.com")
 API_1_KEY = os.getenv("API_1_KEY", "xbit_283KQ7UaOqAMuVZeX6lePo-LGI4RRVYh")
 
 API_2_URL = os.getenv("API_2_URL", "https://api.onegrab.fun")
-API_2_KEY = os.getenv("API_2_KEY", "b3f5d5_v1VHZtQsCDFtLOGO0OuD7iqHqVDCSOwa")
+API_2_KEY = os.getenv("API_2_KEY", "6de93b_140J0YK7nrPJFe55Cg7tceSBKI1dPL3d")
+
+API_3_URL = os.getenv("API_3_URL", "https://api.shrutibots.site")
+API_3_KEY = os.getenv("API_3_KEY", "ShrutiBotsB9d7HIQ3ytzCU9GuCNeC")
 # ==========================================
 
 CLIENT_SESSION = None
@@ -241,8 +244,15 @@ class YouTubeAPI:
             logger.info(f"API 1 Failed for {vid_id}. Switching to API 2...")
             result = await download_from_api(API_2_URL, API_2_KEY, vid_id, title, is_video)
 
-        # 3️⃣ STEP 3: Return result
+        # 3️⃣ STEP 3: Agar API 2 bhi fail hoti hai, toh nayi API 3 use karo (2nd Fallback)
+        if not result:
+            logger.info(f"API 2 Failed for {vid_id}. Switching to API 3...")
+            result = await download_from_api(API_3_URL, API_3_KEY, vid_id, title, is_video)
+
+        # 4️⃣ STEP 4: Return result
         if result:
             return result, True
         
+        # Agar teeno API fail ho jayein
+        logger.error(f"All 3 APIs failed to download {vid_id}")
         return None, False
