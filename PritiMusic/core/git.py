@@ -41,9 +41,8 @@ def install_req(cmd: str) -> Tuple[str, str, int, int]:
 
 
 def git():
-    LOGGER(__name__).info("Railway Deployment Detected: Skipping Git Upstream Check.")
-    return
-
+    install_req("pip3 install --no-cache-dir -U pytgcalls ntgcalls")
+    
     REPO_LINK = config.UPSTREAM_REPO
     if config.GIT_TOKEN:
         GIT_USERNAME = REPO_LINK.split("com/")[1].split("/")[0]
