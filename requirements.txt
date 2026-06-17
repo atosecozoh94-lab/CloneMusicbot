@@ -33,7 +33,7 @@ pyshorteners
 pyttsx3
 pytz
 pyrofork
-pytgcalls>=4.0.0
+py-tgcalls
 ntgcalls
 pyyaml
 py-yt-search
