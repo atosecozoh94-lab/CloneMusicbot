@@ -1,9 +1,3 @@
-import sys
-
-if sys.platform != "win32":
-    import uvloop
-    uvloop.install()
-
 from pyrogram import Client, errors
 from pyrogram.enums import ChatMemberStatus, ParseMode
 
@@ -31,7 +25,6 @@ class Lucky(Client):
         self.mention = self.me.mention
 
         try:
-            # HTML tags ko sahi se close kiya hai aur parse_mode ko explicitly add kiya hai
             await self.send_message(
                 chat_id=config.LOGGER_ID,
                 text=f"<u><b>» {self.mention} ʙᴏᴛ sᴛᴀʀᴛᴇᴅ :</b></u>\n\nɪᴅ : <code>{self.id}</code>\nɴᴀᴍᴇ : {self.name}\nᴜsᴇʀɴᴀᴍᴇ : @{self.username}",
